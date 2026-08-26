@@ -20,6 +20,7 @@ import type { Hint } from "@/lib/types";
 import type { Simulation, TranscriptTurn, TurnResponse } from "@/lib/types";
 import { useMic, useProspectVoice } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
+import MicCheck, { audioAlreadyVerified } from "@/components/MicCheck";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,9 @@ export default function SimulationPage() {
   const [failedLine, setFailedLine] = useState<string | null>(null);
   const [gradeError, setGradeError] = useState<string | null>(null);
   const openedRef = useRef(false);
+  // Audio readiness gate: the graded call (and the prospect's opening line) only
+  // begins once the rep has passed — or skipped — the check.
+  const [callStarted, setCallStarted] = useState(audioAlreadyVerified());
   const voice = useProspectVoice(
     sim?.scenario?.prospect_name ?? "",
     sim?.voice_persona ?? "default",
@@ -169,19 +173,19 @@ export default function SimulationPage() {
 
   // call timer
   useEffect(() => {
-    if (!sim || sim.status === "completed") return;
+    if (!sim || sim.status === "completed" || !callStarted) return;
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, [sim]);
+  }, [sim, callStarted]);
 
   // speak the prospect's opening line once
   useEffect(() => {
-    if (!sim || openedRef.current || muted || endedRef.current) return;
+    if (!sim || !callStarted || openedRef.current || muted || endedRef.current) return;
     const opening = sim.transcript.find((t) => t.speaker === "prospect");
     if (!opening) return;
     openedRef.current = true;
     voice.speak(opening.text);
-  }, [sim, muted, voice]);
+  }, [sim, muted, voice, callStarted]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -319,8 +323,36 @@ export default function SimulationPage() {
             Preparing your prospect…
           </div>
         </div>
+      ) : !callStarted ? (
+        <MicCheck
+          prospectName={scenario.prospect_name}
+          difficulty={sim.difficulty}
+          onStart={() => setCallStarted(true)}
+        />
       ) : (
         <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col px-5 py-6 sm:px-8">
+          {sim.mode === "moment" ? (
+            <section
+              className="mb-4 rounded-xl border border-sky-500/30 bg-sky-500/[0.08] p-5"
+              data-testid="moment-retry-banner"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-300">
+                Retrying coaching moment · {sim.moment_label}
+              </span>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-slate-200">
+                <span className="font-semibold">Situation: </span>
+                {sim.moment_situation}
+              </p>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-sky-200">
+                <span className="font-semibold">Your objective: </span>
+                {sim.moment_objective}
+              </p>
+              <p className="mt-2 text-[12px] text-slate-400">
+                Your original score of {sim.origin_score} stays exactly as it was — this is practice
+                after the assessment.
+              </p>
+            </section>
+          ) : null}
           <section className="flex flex-wrap items-center gap-5 rounded-xl border border-[#1E293B] bg-[#111827] p-5">
             <div
               className={cn(

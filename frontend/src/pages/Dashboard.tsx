@@ -55,7 +55,7 @@ export default function Dashboard() {
               {d ? `Welcome back, ${d.user.name.split(" ")[0]}.` : "Your performance"}
             </h1>
             <p className="mt-1.5 text-[14px] text-muted-foreground">
-              Practice. Perform. Improve. — how am I performing, what's improving, what's next.
+              Practice the conversation before it counts — how am I performing, what's improving, what's next.
             </p>
           </div>
           <Link
@@ -69,6 +69,29 @@ export default function Dashboard() {
         </div>
 
         <DemoLaunch userId={userId} />
+
+        <Link
+          to="/sample-report"
+          data-testid="sample-report-card"
+          className="mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card p-5 transition-colors hover:border-slate-300"
+        >
+          <div className="min-w-0 flex-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              See RepForge in action · sample data
+            </span>
+            <h2 className="mt-1.5 font-heading text-[18px] font-extrabold">
+              Sample coaching report
+            </h2>
+            <p className="mt-1 max-w-xl text-[13.5px] text-muted-foreground">
+              See how RepForge breaks down a real sales conversation, identifies coaching moments and
+              turns mistakes into targeted practice.
+            </p>
+          </div>
+          <span className="flex items-center gap-1.5 text-[13.5px] font-semibold text-primary">
+            Explore sample report
+            <ArrowRight className="size-4" />
+          </span>
+        </Link>
 
         {d?.nudge ? (
           <div
@@ -115,7 +138,7 @@ export default function Dashboard() {
               </span>
             </div>
             <div>
-              <h2 className="font-heading text-[19px] font-bold">Customer readiness</h2>
+              <h2 className="font-heading text-[19px] font-bold">RepForge Readiness Score</h2>
               <p className="mt-1 text-[13.5px] text-muted-foreground">
                 Weighted across the competencies that actually decide a real conversation — not an
                 average, and not XP. {d.readiness.covered} of {d.readiness.total_weighted} weighted

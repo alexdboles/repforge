@@ -1,4 +1,6 @@
-# VocalPitch — AI Voice Sales Training Simulator
+# RepForge — Voice-First AI Sales Academy
+
+Tagline: *Practice the Conversation Before It Counts.*
 
 ## What it does
 A "sales flight simulator". A rep picks an exercise + difficulty, reads a pre-call brief,
@@ -204,3 +206,33 @@ There is **no browser-speech fallback** in the prospect path: `useProspectVoice`
 `voice-error` with a `voice-retry-button` if the approved voice fails. `GET /api/voice/cast`
 verifies every voice id against ElevenLabs and powers the QA page at `/voice-cast`.
 Prospect prompts include SPOKEN_RULES (1-3 sentences, contractions, no chatbot prose).
+
+## Brand & terminology
+RepForge (header, titles, metadata, footer). RepForge Academy = training library,
+RepForge Coach = AI coach voice/rail, RepForge Coaching Report = scorecard,
+RepForge Readiness Score = dashboard competency score, RepForge Simulations = live calls.
+
+## Mic check (pre-call)
+`frontend/src/components/MicCheck.tsx` gates every simulation: live input meter via
+getUserMedia + AnalyserNode, "Test buyer audio" plays a real ElevenLabs line in the
+assigned character voice, then "Start simulation" (or "Skip check"). Passing sets a
+sessionStorage flag (`repforge.audio_verified`) so it is not repeated in the session.
+Nothing from the check touches the transcript, scoring or character memory — the
+prospect's opening line and the call timer only start after Start/Skip.
+
+## Retry That Moment
+`POST /api/simulations/{id}/retry-moment {miss_index}` (owner-only, graded calls only)
+uses `lib.llm.moment_reprise` to rebuild the situation, the objective and the buyer's
+line that re-opens that exact beat, and creates a new simulation with
+`mode="moment"`, `retry_of`, `moment_label/situation/objective`, `origin_score`.
+On completion `moment_improved` is set (retry score >= original) and
+`users.moments_corrected` is incremented. The original attempt and its score are never
+modified. UI: "Retry that moment" on every miss in the coaching report, a banner during
+the retry call, and an original-vs-retry comparison on the retry's report.
+
+## Sample coaching report
+`/sample-report` (linked from the dashboard `sample-report-card`) is hand-authored
+SAMPLE data — readiness 78, Coach's One Thing, skill breakdown, conversation metrics,
+Listening IQ 86 with a missed vocal cue, clickable timeline (03:42 price objection
+shows a full coaching moment + "See how Retry That Moment works"), strengths,
+priorities and a recommended drill. Clearly badged as sample data.

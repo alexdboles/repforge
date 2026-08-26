@@ -13,6 +13,7 @@ import PracticeBusiness from "@/pages/PracticeBusiness";
 import BusinessSetup from "@/pages/BusinessSetup";
 import Team from "@/pages/Team";
 import VoiceCast from "@/pages/VoiceCast";
+import SampleReport from "@/pages/SampleReport";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/practice-business/setup/:profileId" element={<BusinessSetup />} />
         <Route path="/team" element={<Team />} />
         <Route path="/voice-cast" element={<VoiceCast />} />
+        <Route path="/sample-report" element={<SampleReport />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />

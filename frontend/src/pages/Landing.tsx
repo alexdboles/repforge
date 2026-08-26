@@ -60,7 +60,7 @@ export default function Landing() {
             <span className="grid size-8 place-items-center rounded-md bg-[#0F172A] text-white">
               <Mic className="size-4" />
             </span>
-            <span className="font-heading text-[17px] font-extrabold tracking-tight">VocalPitch</span>
+            <span className="font-heading text-[17px] font-extrabold tracking-tight">RepForge</span>
           </div>
           {signedIn ? (
             <Link

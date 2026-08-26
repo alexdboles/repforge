@@ -214,6 +214,10 @@ class SessionResponse(BaseModel):
     token: str
 
 
+class MomentRetryRequest(BaseModel):
+    miss_index: int = Field(default=0, ge=0, le=20)
+
+
 class LoginRequest(BaseModel):
     email: str = Field(max_length=200)
     password: str = Field(max_length=200)
@@ -233,7 +237,7 @@ class SimulationStart(BaseModel):
     scenario_id: Optional[str] = None
     custom_scenario_id: Optional[str] = None
     journey_id: Optional[str] = None
-    mode: Literal["guided", "business", "journey"] = "guided"
+    mode: Literal["guided", "business", "journey", "moment"] = "guided"
 
 
 class TurnRequest(BaseModel):
@@ -314,7 +318,14 @@ class Simulation(BaseModel):
     difficulty_name: str
     scenario: dict[str, Any]
     status: Literal["active", "analyzing", "completed"] = "active"
-    mode: Literal["guided", "business", "journey"] = "guided"
+    mode: Literal["guided", "business", "journey", "moment"] = "guided"
+    # Retry That Moment: this run re-plays one coaching moment from an earlier call.
+    retry_of: Optional[str] = None
+    moment_label: str = ""
+    moment_situation: str = ""
+    moment_objective: str = ""
+    origin_score: int = 0
+    moment_improved: Optional[bool] = None
     voice_persona: str = "default"
     journey_id: Optional[str] = None
     prior_context: str = ""

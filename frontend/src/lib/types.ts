@@ -240,8 +240,15 @@ export interface Simulation {
   difficulty: number;
   difficulty_name: string;
   scenario: ScenarioBrief;
-  status: "active" | "completed";
-  mode: "guided" | "business" | "journey";
+  status: "active" | "analyzing" | "completed";
+  mode: "guided" | "business" | "journey" | "moment";
+  // Retry That Moment (mirrors backend Simulation)
+  retry_of: string | null;
+  moment_label: string;
+  moment_situation: string;
+  moment_objective: string;
+  origin_score: number;
+  moment_improved: boolean | null;
   voice_persona: string;
   journey_id: string | null;
   prior_context: string;

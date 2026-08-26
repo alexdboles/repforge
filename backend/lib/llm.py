@@ -470,3 +470,47 @@ Return JSON:
         "example": str(data.get("example") or ""),
         "avoid": str(data.get("avoid") or ""),
     }
+
+
+async def moment_reprise(
+    simulation_id: str,
+    scenario: dict,
+    exercise: dict,
+    difficulty: dict,
+    transcript: list[dict],
+    miss: dict,
+) -> dict:
+    """Retry That Moment: rebuild the situation just before a coaching moment and
+    the buyer line that re-opens it, so the rep can practise that exact beat."""
+    chat = _chat(
+        f"moment-{simulation_id}",
+        "You are a sales-training designer. You set up a single conversational "
+        "moment for a rep to practise again. You never coach inside the buyer's "
+        "words and never reveal the buyer's hidden information.",
+    )
+    convo = "\n".join(
+        f"{'SALESPERSON' if t['speaker'] == 'rep' else scenario.get('prospect_name', 'BUYER')}: {t['text']}"
+        for t in transcript[-14:]
+    )
+    prompt = f"""BUYER: {scenario.get('prospect_name')}, {scenario.get('prospect_role')} at {scenario.get('company')}
+EXERCISE: {exercise['name']} · Level {difficulty['level']} {difficulty['name']}
+
+CONVERSATION THAT HAPPENED:
+{convo}
+
+THE COACHING MOMENT TO REPLAY:
+title: {miss.get('title')}
+what went wrong: {miss.get('detail')}
+quoted from the call: {miss.get('quote')}
+better approach: {miss.get('better_approach')}
+
+Return JSON:
+{{"situation": "1-2 sentences of neutral setup, addressed to the rep, describing where the conversation is (no coaching advice)",
+ "objective": "one sentence telling the rep what to accomplish in this retry",
+ "buyer_line": "the buyer's spoken line that re-opens this exact moment — 1-2 sentences, natural spoken English, in character, no stage directions"}}"""
+    data = _parse_json(await chat.send_message(UserMessage(text=prompt)))
+    return {
+        "situation": str(data.get("situation") or ""),
+        "objective": str(data.get("objective") or "Handle this moment better than last time."),
+        "buyer_line": _clean(str(data.get("buyer_line") or miss.get("quote") or "")),
+    }

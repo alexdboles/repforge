@@ -19,6 +19,7 @@ from lib.journeys import journey_by_id, scenario_for_stage
 from lib.db import db
 from lib.llm import (
     LlmUnavailable,
+    moment_reprise,
     coaching_hint,
     evaluate_conversation,
     prospect_opening,
@@ -26,6 +27,7 @@ from lib.llm import (
 )
 from models.schemas import (
     Evaluation,
+    MomentRetryRequest,
     Hint,
     Simulation,
     SimulationStart,
@@ -277,6 +279,13 @@ async def complete_simulation(sim_id: str, me: dict = Depends(current_user)):
         "evaluation": evaluation.model_dump(),
         "xp_awarded": xp,
     }
+    if sim.get("mode") == "moment":
+        improved = evaluation.overall_score >= int(sim.get("origin_score") or 0)
+        updates["moment_improved"] = improved
+        if improved:
+            await db.users.update_one(
+                {"id": sim["user_id"]}, {"$inc": {"moments_corrected": 1}}
+            )
     await db.simulations.update_one({"id": sim_id}, {"$set": updates})
     await _award(sim["user_id"], xp)
     await _close_assignment(sim, evaluation.overall_score, ended)
@@ -360,6 +369,72 @@ async def retry_simulation(sim_id: str, me: dict = Depends(current_user)):
             status_code=502, detail=f"AI prospect could not be reached: {exc}"
         ) from exc
 
+    await db.simulations.insert_one(sim.model_dump())
+    return Simulation(**_shield(sim.model_dump()))
+
+
+@router.post("/simulations/{sim_id}/retry-moment", response_model=Simulation)
+async def retry_moment(
+    sim_id: str, payload: MomentRetryRequest, me: dict = Depends(current_user)
+):
+    """Retry That Moment: re-enter one coaching moment from a graded call instead
+    of replaying the whole simulation. The original attempt and its score are
+    never modified — this is practice after the assessment."""
+    rate_limit(f"start:{me['id']}", 40, 3600, "Too many retries started. Please wait a few minutes.")
+    old = await _load(sim_id, me)
+    evaluation = old.get("evaluation") or {}
+    misses = evaluation.get("misses") or []
+    if old["status"] != "completed" or not misses:
+        raise HTTPException(
+            status_code=409, detail="This call has no graded coaching moments to retry."
+        )
+    if payload.miss_index >= len(misses):
+        raise HTTPException(status_code=404, detail="Coaching moment not found")
+    miss = misses[payload.miss_index]
+
+    exercise = exercise_by_id(old["exercise_id"])
+    difficulty = difficulty_by_level(old["difficulty"])
+    if not exercise or not difficulty:
+        raise HTTPException(status_code=422, detail="This moment cannot be retried")
+    try:
+        setup = await moment_reprise(
+            sim_id,
+            old["scenario"],
+            exercise,
+            difficulty,
+            old.get("transcript") or [],
+            miss,
+        )
+    except LlmUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("moment reprise failed")
+        raise HTTPException(
+            status_code=502, detail="The coaching moment could not be rebuilt."
+        ) from exc
+
+    sim = Simulation(
+        user_id=me["id"],
+        exercise_id=old["exercise_id"],
+        exercise_name=old["exercise_name"],
+        difficulty=old["difficulty"],
+        difficulty_name=old["difficulty_name"],
+        scenario=old["scenario"],
+        mode="moment",
+        voice_persona=old.get("voice_persona") or voice_persona_for(old["scenario"]),
+        journey_id=old.get("journey_id"),
+        retry_of=sim_id,
+        moment_label=str(miss.get("title") or "Coaching moment"),
+        moment_situation=setup["situation"],
+        moment_objective=setup["objective"],
+        origin_score=int(evaluation.get("overall_score") or 0),
+        # The buyer re-opens the moment; from there the conversation is live again.
+        transcript=[TranscriptTurn(speaker="prospect", text=setup["buyer_line"], at=0.0)],
+        prior_context=(
+            "You are mid-conversation with this salesperson. "
+            f"Context: {setup['situation']}"
+        ),
+    )
     await db.simulations.insert_one(sim.model_dump())
     return Simulation(**_shield(sim.model_dump()))
 

@@ -124,7 +124,7 @@ export default function Training() {  const userId = getUserId();
     <AppShell>
       <div data-testid="training-page">
         <h1 className="font-heading text-[30px] font-extrabold tracking-[-0.02em]">
-          Training library
+          RepForge Academy
         </h1>
         <p className="mt-1.5 max-w-2xl text-[14px] text-muted-foreground">
           Every skill runs the full loop: <span className="font-semibold text-foreground">Learn → Prepare → Simulate → Coaching → Retry</span>. Some

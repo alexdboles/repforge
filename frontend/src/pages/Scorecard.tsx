@@ -39,6 +39,13 @@ export default function Scorecard() {
   const userId = getUserId();
   const navigate = useNavigate();
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const retryMoment = useMutation({
+    mutationFn: (missIndex: number) =>
+      apiPost<Simulation>(`/simulations/${id}/retry-moment`, { miss_index: missIndex }),
+    onSuccess: (next) => navigate(`/simulation/${next.id}`),
+    onError: () => toast.error("That coaching moment could not be rebuilt. Please try again."),
+  });
+
   const retrySame = useMutation({
     mutationFn: () => apiPost<Simulation>(`/simulations/${id}/retry`),
     onSuccess: (next) => navigate(`/simulation/${next.id}`),
@@ -124,7 +131,8 @@ export default function Scorecard() {
               <span>{sim.transcript.length} turns</span>
             </div>
             <h1 className="mt-2 font-heading text-[30px] font-extrabold tracking-[-0.02em]">
-              Call debrief · {sim.scenario.prospect_name}
+              {sim.mode === "moment" ? "Coaching moment retry · " : "RepForge Coaching Report · "}
+              {sim.scenario.prospect_name}
             </h1>
             <p className="mt-1 text-[14px] text-muted-foreground">
               {sim.scenario.prospect_role} at {sim.scenario.company}
@@ -168,6 +176,46 @@ export default function Scorecard() {
             ) : null}
           </div>
         </div>
+
+        {sim.mode === "moment" ? (
+          <section
+            className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-5"
+            data-testid="moment-retry-summary"
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">
+              Retried coaching moment
+            </span>
+            <h2 className="mt-1.5 font-heading text-[18px] font-extrabold" data-testid="moment-retry-label">
+              {sim.moment_label}
+            </h2>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-700">
+              {sim.moment_objective}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-[13px]">
+              <span className="rounded-md bg-white px-3 py-1.5 font-semibold text-slate-700">
+                Original simulation: {sim.origin_score}
+              </span>
+              <span className="rounded-md bg-white px-3 py-1.5 font-semibold text-slate-700">
+                This retry: {evaluation?.overall_score ?? "—"}
+              </span>
+              {sim.moment_improved === null ? null : (
+                <span
+                  className={cn(
+                    "rounded-md px-3 py-1.5 font-semibold",
+                    sim.moment_improved ? "bg-emerald-600 text-white" : "bg-amber-500 text-white",
+                  )}
+                  data-testid="moment-retry-verdict"
+                >
+                  {sim.moment_improved ? "Much better ✓" : "Try that moment again"}
+                </span>
+              )}
+            </div>
+            <p className="mt-3 text-[12.5px] text-muted-foreground">
+              Your original score is preserved — this is practice after the assessment, not a
+              rewrite of it.
+            </p>
+          </section>
+        ) : null}
 
         {!evaluation ? (
           <div
@@ -317,6 +365,20 @@ export default function Scorecard() {
                             <span className="text-slate-700">{s.better_approach}</span>
                           </div>
                         ) : null}
+                        <Button
+                          size="sm"
+                          className="mt-3 font-semibold"
+                          onClick={() => retryMoment.mutate(i)}
+                          disabled={retryMoment.isPending}
+                          data-testid={`retry-moment-${i}`}
+                        >
+                          {retryMoment.isPending ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="size-3.5" />
+                          )}
+                          Retry that moment
+                        </Button>
                       </div>
                     ))}
                   </div>

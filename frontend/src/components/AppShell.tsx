@@ -40,7 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Headphones className="size-4" />
             </span>
             <span className="font-heading text-[17px] font-extrabold tracking-tight">
-              VocalPitch
+              RepForge
             </span>
           </Link>
 
@@ -113,7 +113,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto max-w-[1400px] px-5 py-8 sm:px-8">{children}</main>
 
       <footer className="border-t border-border py-6 text-center text-[12px] text-muted-foreground">
-        VocalPitch · Practice the conversation before it counts.
+        RepForge · Practice the Conversation Before It Counts. · Voice experience powered by ElevenLabs
       </footer>
     </div>
   );

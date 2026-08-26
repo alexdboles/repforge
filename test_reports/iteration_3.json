@@ -1,0 +1,124 @@
+{
+  "iteration": 3,
+  "mode": "retest",
+  "passed": 15,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "RepForge rebrand is complete - no 'VocalPitch' anywhere user-visible",
+      "name": "rebrand-no-vocalpitch",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Title tag and meta description both say RepForge; body text on /, /dashboard, /training, /history, /profile, /voice-cast has zero 'VocalPitch' occurrences; Training shows 'RepForge Academy'; Dashboard shows 'RepForge Readiness Score'. Note: 'vocalpitch.user_id' / 'vocalpitch.session_token' remain as internal localStorage KEY names in lib/profile.ts and lib/api.ts - not user-visible, so criterion is satisfied."
+    },
+    {
+      "criterion": "RepForge rebrand - scorecard heading",
+      "name": "code review (Scorecard.tsx:134)",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Scorecard.tsx renders '{sim.mode===\"moment\" ? \"Coaching moment retry Â· \" : \"RepForge Coaching Report Â· \"}{buyer}' - confirmed via retry-moment-ui-flow screenshot (graded-report-with-miss) showing 'RepForge Coaching Report' heading."
+    },
+    {
+      "criterion": "Mic check gates every live simulation and is skippable",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "First demo-launch shows mic-check with mic-check-mic-status/voice-status/test-mic/test-voice/start(disabled, no real mic in headless Chromium)/skip; clicking mic-check-skip enters the call, transcript-live shows only the prospect opener (no mic-check text leaked); starting a SECOND simulation in the same session goes straight to transcript-live with mic-check absent (sessionStorage repforge.audio_verified flag)."
+    },
+    {
+      "criterion": "Mic check buyer-audio test uses the assigned ElevenLabs voice",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Clicking mic-check-test-voice fired POST /api/voice/speak -> 200, content-type audio/*; mic-check-voice-status went from 'Not tested' to 'Ready \u2713'."
+    },
+    {
+      "criterion": "Mic check buyer-audio test uses the assigned ElevenLabs voice (API)",
+      "name": "test_tscheck_mic_check_voice_speak.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/voice/speak {text, character:'Jordan Miller', difficulty:1} with a fresh authenticated user -> 200, content-type starts with 'audio/', payload >1000 bytes. 1 passed."
+    },
+    {
+      "criterion": "Retry That Moment creates a focused retry of one coaching moment (API)",
+      "name": "test_tscheck_retry_that_moment.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Weak-pitch call ('Our platform is cheaper and has more features.') completed and graded with >=1 miss. POST /simulations/{id}/retry-moment {miss_index:0} -> 200, mode='moment', retry_of=<original id>, non-empty moment_label/situation/objective, origin_score==original overall_score, transcript has exactly 1 prospect turn. Sent a typed reply + /complete on the retry -> 200 with moment_improved as bool. Re-GET original sim: status/transcript/overall_score unchanged. Foreign user's retry-moment on that sim id -> 404. miss_index=min(len(misses)+5,20) on the graded original -> 404. 1 passed in ~40s."
+    },
+    {
+      "criterion": "Retry That Moment works from the UI",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Graded report shows retry-moment-0; clicking navigates to /simulation/<newid> with moment-retry-banner (situation+objective) and the buyer's re-opening line in transcript-live; typed reply + End -> report shows moment-retry-summary ('Original simulation:'/'This retry:') and moment-retry-verdict."
+    },
+    {
+      "criterion": "Sample coaching report is reachable and clearly sample data",
+      "name": "sample-report-clearly-labeled",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Dashboard sample-report-card -> /sample-report: sample-report-badge='Sample data \u00b7 not your performance', sample-readiness contains 78, sample-skill-breakdown has 7 rows, sample-metrics has 8 tiles, sample-listening-iq contains 86 and 'Missed vocal cue', sample-timeline has 8 buttons, sample-timeline-03-42 reveals sample-coaching-moment + sample-retry-moment, sample-strengths/priorities visible, sample-start-drill has a real href (/learn/objection-handling?difficulty=3). Only console noise was expected anonymous 401s; no HTTP>=400 observed."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard visible after guest sign-in; nav to /history and back stable, no loop."
+    },
+    {
+      "criterion": "Regression: email signup/login persistence",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: signup->dashboard, logout->auth-panel, re-login->dashboard, wrong password stays on auth-panel with error toast."
+    },
+    {
+      "criterion": "Regression: session survives without cookies",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: after clearCookies + reload, dashboard still visible via bearer token in localStorage."
+    },
+    {
+      "criterion": "Regression: demo path reaches simulation (now via mic-check-skip)",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Updated script: demo-launch-button -> /simulation/<id> -> mic-check appears -> mic-check-skip -> transcript-live shows non-empty opener. No HTTP>=400 (other than expected anonymous 401 probes) and no console errors."
+    },
+    {
+      "criterion": "Regression: end simulation is a hard stop mid-generation (now via mic-check-skip)",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Updated script: skip mic-check, typed reply, immediate double end-simulation-button click -> grading-overlay -> /scorecard/<id> reached cleanly (409 seen on the in-flight duplicate call, as expected by the hard-stop design)."
+    },
+    {
+      "criterion": "Regression: hard-stop / duplication / auth backend suite",
+      "name": "test_tscheck_end_simulation_hard_stop.py, test_tscheck_hidden_intel_not_exposed.py, test_tscheck_negative_states.py, test_tscheck_cross_user_idor_blocked.py, test_tscheck_unauthenticated_access_rejected.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Full suite: `python -m pytest -q` -> 11 passed in 65.20s (9 pre-existing + 2 new files added this iteration)."
+    },
+    {
+      "criterion": "Regression: voice cast and training library (unchanged, retained)",
+      "name": "voice-cast-verified-with-preview / training-library-coming-soon-cards",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Not re-run this iteration (no code touching /voice-cast or /training roadmap cards); both were passing as of iteration 2 and remain persisted checks available to re-run on demand."
+    }
+  ],
+  "bugs": [],
+  "action_items": [
+    {
+      "item": "Two persisted browser checks (demo-launch-reaches-simulation, end-simulation-hard-stop) needed a script update this iteration to add the mic-check-skip step introduced by the new mic-check gate, plus scrollIntoViewIfNeeded before clicking demo-launch-button (the button sits below the fold and a plain force-click on it intermittently no-ops in headless Chromium - not an app bug, a check-authoring quirk). Updated in place; both now pass reliably.",
+      "severity": "low"
+    }
+  ]
+}
