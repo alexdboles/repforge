@@ -1,0 +1,148 @@
+{
+  "iteration": 7,
+  "mode": "retest",
+  "passed": 24,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Backend test suite: python -m pytest -q in /app/backend passes with no new failures",
+      "name": "pytest -q (18 files)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> '18 passed in 117.32s'. 16 pre-existing files plus 2 new ones added this iteration."
+    },
+    {
+      "criterion": "No regression: EvalRequest-based evaluate_conversation returns a full graded scorecard (overall_score, category_scores, strengths, misses, coaching_priorities, metrics)",
+      "name": "test_tscheck_attempts_series_and_grading_shape.py::test_scorecard_shape_and_attempts_series",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: POST /simulations -> turn -> /complete -> 200; evaluation contains overall_score(number), category_scores(list of {category,score,note}, non-empty), strengths, misses, coaching_priorities, metrics all present."
+    },
+    {
+      "criterion": "No regression: attempt_series split (_attempt/_apply_totals/_apply_category_movement) — GET /users/{me}/attempts/{exercise_id} shape with first/latest/best/delta and 2-attempt movement fields",
+      "name": "test_tscheck_attempts_series_and_grading_shape.py::test_scorecard_shape_and_attempts_series",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: same test file - after 1 attempt: attempts[0] has index/overall_score/categories, first_score==latest_score==best_score, delta==0. After 2nd completed call on same exercise: first_score/latest_score/best_score/delta all correctly computed, and category_deltas/most_improved/still_weakest keys present."
+    },
+    {
+      "criterion": "No regression in Retry That Moment full flow (mode='moment', origin_score, single opening turn, original unchanged, 404 on bad miss_index/foreign id)",
+      "name": "test_tscheck_retry_that_moment.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Re-run in full suite: retry -> mode='moment', origin_score==original overall_score, exactly 1 prospect turn; retry completed independently; original sim transcript/score unchanged; foreign user 404; out-of-range miss_index 404."
+    },
+    {
+      "criterion": "Retry That Moment on a not-yet-graded (active) simulation is rejected with 409",
+      "name": "test_tscheck_retry_moment_active_sim_conflict.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: started a fresh simulation (status still active, no /complete called) -> POST /simulations/{id}/retry-moment {miss_index:0} -> 409."
+    },
+    {
+      "criterion": "Frontend section extraction did not change the coaching report (strengths-list/strength-*, retry-moment-<i> buttons, reaches moment-retry-banner)",
+      "name": "coaching-report-full-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Guest -> demo sim -> weak pitch -> end -> scorecard: strengths-list visible with >=1 strength-* card, >=1 retry-moment-* button, retry-moment-0 visible; clicking it navigates to /simulation/<id> with moment-retry-banner + transcript-live visible. Only expected 401/409 console noise."
+    },
+    {
+      "criterion": "Memoised lists: /practice-business/setup objection suggestion chips add-and-remove correctly",
+      "name": "business-objection-suggestions-memo",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Guest -> /practice-business/setup -> filled company/product -> advanced to Objections step -> objection-suggestion-* chip clicked -> chip removed from suggestions (count dropped, testid gone) and appeared as objection-chip-<text> in the rep's list."
+    },
+    {
+      "criterion": "Memoised lists: skill module prepare step still lists 'things to remember' items",
+      "name": "skill-module-prepare-remember-list",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Guest -> /learn/cold-call -> module-skip-to-call -> module-prepare visible -> prepare-remember block visible with multiple (>=2) list items."
+    },
+    {
+      "criterion": "Regression: mic-check gate + skippable second time",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: gate blocks start until ready; skip enters call; second sim skips gate. Only expected 401 probe."
+    },
+    {
+      "criterion": "Regression: mic-check test-voice uses ElevenLabs",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: POST /api/voice/speak -> 200 audio/*, voice-status becomes 'Ready ✓'."
+    },
+    {
+      "criterion": "Regression: End Simulation hard stop (UI)",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: double end-simulation-button click -> one 409 on duplicate in-flight call (expected) -> scorecard reached cleanly."
+    },
+    {
+      "criterion": "Regression: demo launch reaches simulation",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: demo-launch-button (scrolled into view) -> simulation started."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard and history reachable after guest sign-in, no loop."
+    },
+    {
+      "criterion": "Regression: email signup/login persistence",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: signup -> logout -> re-login persists session; wrong password rejected."
+    },
+    {
+      "criterion": "Regression: session survives without cookies",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard still visible after clearing cookies (bearer fallback)."
+    },
+    {
+      "criterion": "Regression: no duplicate-key/max-update-depth/uncaught console errors across pages + live sim",
+      "name": "no-react-key-hook-regressions",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: browsed /, /dashboard, /training, /sample-report, /voice-cast, live sim + spacebar mic toggle. No duplicate-key/max-update-depth/uncaught errors."
+    },
+    {
+      "criterion": "Regression: Retry That Moment UI flow end-to-end",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: graded report -> retry-moment-0 -> moment-retry-banner -> typed reply -> end -> moment-retry-summary/verdict; original sim unchanged."
+    },
+    {
+      "criterion": "Ancillary regressions retained from prior iterations",
+      "name": "rebrand-no-vocalpitch / sample-report-clearly-labeled / training-library-coming-soon-cards / voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "All 4 re-run by name this iteration; all passed with only expected 401 console noise."
+    }
+  ],
+  "bugs": [],
+  "action_items": [],
+  "notes": [
+    "Retest mode: ran the full backend pytest suite first (18 passed, 2 new files added), then re-ran all pre-existing named browser checks by name only, per instructions.",
+    "Two new backend test files close gaps this iteration's briefing raised: (1) test_tscheck_attempts_series_and_grading_shape.py for the evaluate_conversation(EvalRequest) full scorecard shape and the attempt_series (_attempt/_apply_totals/_apply_category_movement) first/latest/best/delta/category_deltas/most_improved/still_weakest fields; (2) test_tscheck_retry_moment_active_sim_conflict.py for the 409-on-active-simulation branch of the retry_moment split not previously covered.",
+    "Three new browser checks close UI-facing gaps: coaching-report-full-render (strengths-list/strength-* cards, retry-moment-* buttons, banner reachability), business-objection-suggestions-memo (memoised suggestion-chip add/remove on the multi-step /practice-business/setup wizard), skill-module-prepare-remember-list (prepare-remember list on /learn/:exerciseId via the module-skip-to-call shortcut).",
+    "Non-obvious findings while writing these (not bugs, just app wiring worth noting): 'category_scores' in the evaluation is a list of {category,score,note}, not a dict; /business is not a real route (actual path is /practice-business/setup); the setup wizard's Next button briefly disables while autosaving between steps, so rapid unwaited clicks silently no-op — checks now wait for the button to re-enable between steps; jumping straight to the Pre-call prep step is done via the module-skip-to-call button rather than the step-nav pill.",
+    "spec_deviations from the briefing (un-split SkillModule/BusinessSetup/Team, decorative index keys, bearer token in localStorage, anonymous 401 on /api/auth/me) remain accepted as intentional, not flagged as bugs.",
+    "Console noise across all checks was limited to the expected anonymous 401 probe on GET /api/auth/me and the expected 409s from the intentional double-click/concurrency hard-stop tests."
+  ]
+}

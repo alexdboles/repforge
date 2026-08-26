@@ -92,6 +92,11 @@ export default function SkillModule() {
     scenarios && scenarios.length ? scenarios[scenarioIdx % scenarios.length] : undefined;
   const sheet = brief?.product_sheet ?? null;
 
+  const rememberList = useMemo(
+    () => (brief?.things_to_remember ?? []).filter(Boolean),
+    [brief?.things_to_remember],
+  );
+
   const start = useMutation({
     mutationFn: () =>
       apiPost<Simulation>("/simulations", {
@@ -513,7 +518,7 @@ export default function SkillModule() {
                     Things to remember
                   </div>
                   <ul className="mt-2 space-y-1.5">
-                    {brief.things_to_remember.filter(Boolean).map((t) => (
+                    {rememberList.map((t) => (
                       <li key={t} className="text-[13.5px] leading-snug text-amber-950">
                         · {t}
                       </li>

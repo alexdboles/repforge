@@ -44,6 +44,46 @@ async def mark_trained(user_id: str, exercise_id: str, me: dict = Depends(curren
     return {"trained_skills": trained}
 
 
+def _attempt(index: int, sim: dict) -> Attempt:
+    ev = sim.get("evaluation") or {}
+    metrics = ev.get("metrics") or {}
+    return Attempt(
+        index=index,
+        simulation_id=sim["id"],
+        started_at=sim["started_at"],
+        difficulty=sim["difficulty"],
+        difficulty_name=sim["difficulty_name"],
+        mode=sim.get("mode", "guided"),
+        prospect_name=sim["scenario"].get("prospect_name", ""),
+        overall_score=int(ev.get("overall_score") or 0),
+        categories={c["category"]: int(c["score"]) for c in ev.get("category_scores", [])},
+        talk_ratio=int(metrics.get("talk_ratio") or 0),
+        question_count=int(metrics.get("question_count") or 0),
+    )
+
+
+def _apply_totals(series: AttemptSeries, attempts: list[Attempt]) -> None:
+    if not attempts:
+        return
+    series.first_score = attempts[0].overall_score
+    series.latest_score = attempts[-1].overall_score
+    series.best_score = max(a.overall_score for a in attempts)
+    series.delta = attempts[-1].overall_score - attempts[0].overall_score
+
+
+def _apply_category_movement(series: AttemptSeries, attempts: list[Attempt]) -> None:
+    """First-vs-latest movement per competency: what improved, what still lags."""
+    if len(attempts) < 2:
+        return
+    first, last = attempts[0].categories, attempts[-1].categories
+    deltas = {c: last[c] - first[c] for c in last if c in first}
+    series.category_deltas = deltas
+    if deltas:
+        series.most_improved = max(deltas, key=lambda k: deltas[k])
+    if last:
+        series.still_weakest = min(last, key=lambda k: last[k])
+
+
 @router.get("/users/{user_id}/attempts/{exercise_id}", response_model=AttemptSeries)
 async def attempt_series(user_id: str, exercise_id: str, me: dict = Depends(current_user)):
     require_self(user_id, me)
@@ -52,42 +92,12 @@ async def attempt_series(user_id: str, exercise_id: str, me: dict = Depends(curr
         raise HTTPException(status_code=404, detail="Unknown exercise")
     sims = await _completed({"user_id": user_id, "exercise_id": exercise_id})
 
-    attempts: list[Attempt] = []
-    for i, s in enumerate(sims):
-        ev = s.get("evaluation") or {}
-        metrics = ev.get("metrics") or {}
-        attempts.append(
-            Attempt(
-                index=i + 1,
-                simulation_id=s["id"],
-                started_at=s["started_at"],
-                difficulty=s["difficulty"],
-                difficulty_name=s["difficulty_name"],
-                mode=s.get("mode", "guided"),
-                prospect_name=s["scenario"].get("prospect_name", ""),
-                overall_score=int(ev.get("overall_score") or 0),
-                categories={
-                    c["category"]: int(c["score"]) for c in ev.get("category_scores", [])
-                },
-                talk_ratio=int(metrics.get("talk_ratio") or 0),
-                question_count=int(metrics.get("question_count") or 0),
-            )
-        )
-
-    series = AttemptSeries(exercise_id=exercise_id, exercise_name=exercise["name"], attempts=attempts)
-    if attempts:
-        series.first_score = attempts[0].overall_score
-        series.latest_score = attempts[-1].overall_score
-        series.best_score = max(a.overall_score for a in attempts)
-        series.delta = attempts[-1].overall_score - attempts[0].overall_score
-    if len(attempts) >= 2:
-        first, last = attempts[0].categories, attempts[-1].categories
-        deltas = {c: last[c] - first[c] for c in last if c in first}
-        series.category_deltas = deltas
-        if deltas:
-            series.most_improved = max(deltas, key=lambda k: deltas[k])
-        if last:
-            series.still_weakest = min(last, key=lambda k: last[k])
+    attempts = [_attempt(i + 1, sim) for i, sim in enumerate(sims)]
+    series = AttemptSeries(
+        exercise_id=exercise_id, exercise_name=exercise["name"], attempts=attempts
+    )
+    _apply_totals(series, attempts)
+    _apply_category_movement(series, attempts)
     return series
 
 

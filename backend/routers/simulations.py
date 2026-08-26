@@ -18,6 +18,7 @@ from lib.dates import today_iso
 from lib.journeys import journey_by_id, scenario_for_stage
 from lib.db import db
 from lib.llm import (
+    EvalRequest,
     LlmUnavailable,
     moment_reprise,
     coaching_hint,
@@ -248,15 +249,17 @@ async def _grade(sim: dict, transcript: list[dict], duration: int) -> Evaluation
     sim_id = sim["id"]
     try:
         raw = await evaluate_conversation(
-            sim_id,
-            sim["scenario"],
-            exercise_by_id(sim["exercise_id"]),
-            difficulty_by_level(sim["difficulty"]),
-            transcript,
-            duration,
-            focus=focus_categories(sim["exercise_id"]),
-            principles=graded_principles(sim["exercise_id"]),
-            prior=sim.get("prior_context") or "",
+            EvalRequest(
+                simulation_id=sim_id,
+                scenario=sim["scenario"],
+                exercise=exercise_by_id(sim["exercise_id"]),
+                difficulty=difficulty_by_level(sim["difficulty"]),
+                transcript=transcript,
+                duration_seconds=duration,
+                focus=focus_categories(sim["exercise_id"]),
+                principles=graded_principles(sim["exercise_id"]),
+                prior=sim.get("prior_context") or "",
+            )
         )
         return Evaluation(**raw)
     except LlmUnavailable as exc:
@@ -395,37 +398,28 @@ async def retry_simulation(sim_id: str, me: dict = Depends(current_user)):
     return Simulation(**_shield(sim.model_dump()))
 
 
-@router.post("/simulations/{sim_id}/retry-moment", response_model=Simulation)
-async def retry_moment(
-    sim_id: str, payload: MomentRetryRequest, me: dict = Depends(current_user)
-):
-    """Retry That Moment: re-enter one coaching moment from a graded call instead
-    of replaying the whole simulation. The original attempt and its score are
-    never modified — this is practice after the assessment."""
-    rate_limit(f"start:{me['id']}", 40, 3600, "Too many retries started. Please wait a few minutes.")
-    old = await _load(sim_id, me)
+def _pick_moment(old: dict, miss_index: int) -> tuple[dict, dict]:
+    """Validate that this call has a graded coaching moment at that index."""
     evaluation = old.get("evaluation") or {}
     misses = evaluation.get("misses") or []
     if old["status"] != "completed" or not misses:
         raise HTTPException(
             status_code=409, detail="This call has no graded coaching moments to retry."
         )
-    if payload.miss_index >= len(misses):
+    if miss_index >= len(misses):
         raise HTTPException(status_code=404, detail="Coaching moment not found")
-    miss = misses[payload.miss_index]
+    return evaluation, misses[miss_index]
 
+
+async def _build_reprise(sim_id: str, old: dict, miss: dict) -> dict:
+    """Ask the coach model to rebuild the situation and the buyer's re-opening line."""
     exercise = exercise_by_id(old["exercise_id"])
     difficulty = difficulty_by_level(old["difficulty"])
     if not exercise or not difficulty:
         raise HTTPException(status_code=422, detail="This moment cannot be retried")
     try:
-        setup = await moment_reprise(
-            sim_id,
-            old["scenario"],
-            exercise,
-            difficulty,
-            old.get("transcript") or [],
-            miss,
+        return await moment_reprise(
+            sim_id, old["scenario"], exercise, difficulty, old.get("transcript") or [], miss
         )
     except LlmUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -435,8 +429,12 @@ async def retry_moment(
             status_code=502, detail="The coaching moment could not be rebuilt."
         ) from exc
 
-    sim = Simulation(
-        user_id=me["id"],
+
+def _moment_simulation(
+    user_id: str, old: dict, miss: dict, evaluation: dict, setup: dict
+) -> Simulation:
+    return Simulation(
+        user_id=user_id,
         exercise_id=old["exercise_id"],
         exercise_name=old["exercise_name"],
         difficulty=old["difficulty"],
@@ -445,7 +443,7 @@ async def retry_moment(
         mode="moment",
         voice_persona=old.get("voice_persona") or voice_persona_for(old["scenario"]),
         journey_id=old.get("journey_id"),
-        retry_of=sim_id,
+        retry_of=old["id"],
         moment_label=str(miss.get("title") or "Coaching moment"),
         moment_situation=setup["situation"],
         moment_objective=setup["objective"],
@@ -457,6 +455,20 @@ async def retry_moment(
             f"Context: {setup['situation']}"
         ),
     )
+
+
+@router.post("/simulations/{sim_id}/retry-moment", response_model=Simulation)
+async def retry_moment(
+    sim_id: str, payload: MomentRetryRequest, me: dict = Depends(current_user)
+):
+    """Retry That Moment: re-enter one coaching moment from a graded call instead
+    of replaying the whole simulation. The original attempt and its score are
+    never modified — this is practice after the assessment."""
+    rate_limit(f"start:{me['id']}", 40, 3600, "Too many retries started. Please wait a few minutes.")
+    old = await _load(sim_id, me)
+    evaluation, miss = _pick_moment(old, payload.miss_index)
+    setup = await _build_reprise(sim_id, old, miss)
+    sim = _moment_simulation(me["id"], old, miss, evaluation, setup)
     await db.simulations.insert_one(sim.model_dump())
     return Simulation(**_shield(sim.model_dump()))
 

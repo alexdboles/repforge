@@ -3,6 +3,7 @@
 Uses the Emergent universal key via emergentintegrations (Claude Sonnet 4.5).
 """
 import json
+from dataclasses import dataclass
 import os
 import re
 from typing import Any
@@ -184,17 +185,27 @@ EVAL_SCHEMA = """{
 }"""
 
 
-async def evaluate_conversation(
-    simulation_id: str,
-    scenario: dict,
-    exercise: dict,
-    difficulty: dict,
-    transcript: list[dict],
-    duration_seconds: int,
-    focus: list[str] | None = None,
-    principles: list[str] | None = None,
-    prior: str = "",
-) -> dict[str, Any]:
+@dataclass(slots=True)
+class EvalRequest:
+    """Everything the coaching pass needs about one completed call, grouped so the
+    call site reads as one object instead of nine positional arguments."""
+
+    simulation_id: str
+    scenario: dict
+    exercise: dict
+    difficulty: dict
+    transcript: list[dict]
+    duration_seconds: int
+    focus: list[str] | None = None
+    principles: list[str] | None = None
+    prior: str = ""
+
+
+async def evaluate_conversation(req: EvalRequest) -> dict[str, Any]:
+    simulation_id = req.simulation_id
+    scenario, exercise, difficulty = req.scenario, req.exercise, req.difficulty
+    transcript, duration_seconds = req.transcript, req.duration_seconds
+    focus, principles, prior = req.focus, req.principles, req.prior
     chat = _chat(f"eval-{simulation_id}", EVAL_SYSTEM)
     convo = "\n".join(
         f"[{i}] {'SALESPERSON' if t['speaker'] == 'rep' else scenario['prospect_name'].upper()}: {t['text']}"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Loader2, Plus, X } from "lucide-react";
@@ -132,6 +132,12 @@ export default function BusinessSetup() {
 
   const set = <K extends keyof SalesProfileInput>(key: K, value: SalesProfileInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  // Only recompute the suggestion chips when the rep's own objection list changes.
+  const remainingSuggestions = useMemo(
+    () => OBJECTION_SUGGESTIONS.filter((o) => !form.common_objections.includes(o)),
+    [form.common_objections],
+  );
 
   const addObjection = (text: string) => {
     const clean = text.trim();
@@ -444,7 +450,7 @@ export default function BusinessSetup() {
                     Common ones — tap to add
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {OBJECTION_SUGGESTIONS.filter((o) => !form.common_objections.includes(o)).map(
+                    {remainingSuggestions.map(
                       (o) => (
                         <button
                           key={o}

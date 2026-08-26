@@ -14,13 +14,11 @@ import {
 } from "recharts";
 import {
   ArrowRight,
-  CheckCircle2,
   Lightbulb,
   Loader2,
   MessageSquareQuote,
   RotateCcw,
   Target,
-  TriangleAlert,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
@@ -29,6 +27,7 @@ import type { Simulation } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { ScoreRing, SkillBar } from "@/components/Metrics";
 import AttemptComparison from "@/components/AttemptComparison";
+import { MissesSection, StrengthsSection } from "@/components/FeedbackSections";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -302,87 +301,12 @@ export default function Scorecard() {
               </section>
 
               <div className="space-y-6">
-                <section className="rounded-xl border border-border bg-card p-5">
-                  <h2 className="flex items-center gap-2 font-heading text-[17px] font-bold">
-                    <CheckCircle2 className="size-4 text-emerald-600" />
-                    What you did well
-                  </h2>
-                  <div className="mt-4 space-y-3" data-testid="strengths-list">
-                    {evaluation.strengths.map((s, i) => (
-                      <div
-                        key={`${i}-${s.title}`}
-                        className="rounded-md border-l-4 border-emerald-500 bg-emerald-50/70 p-3.5"
-                        data-testid={`strength-${i}`}
-                      >
-                        <div className="font-heading text-[14.5px] font-bold text-emerald-900">
-                          {s.title}
-                        </div>
-                        <p className="mt-1 text-[13px] leading-relaxed text-emerald-950/80">
-                          {s.detail}
-                        </p>
-                        {s.quote ? (
-                          <p className="mt-2 font-mono text-[12px] italic text-emerald-800">
-                            “{s.quote}”
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
-                    {!evaluation.strengths.length ? (
-                      <p className="text-[13px] text-muted-foreground">
-                        Nothing stood out as a strength on this call — the coaching below is where to
-                        start.
-                      </p>
-                    ) : null}
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-border bg-card p-5">
-                  <h2 className="flex items-center gap-2 font-heading text-[17px] font-bold">
-                    <TriangleAlert className="size-4 text-amber-600" />
-                    Missed opportunities
-                  </h2>
-                  <div className="mt-4 space-y-3" data-testid="misses-list">
-                    {evaluation.misses.map((s, i) => (
-                      <div
-                        key={`${i}-${s.title}`}
-                        className="rounded-md border-l-4 border-amber-500 bg-amber-50/70 p-3.5"
-                        data-testid={`miss-${i}`}
-                      >
-                        <div className="font-heading text-[14.5px] font-bold text-amber-900">
-                          {s.title}
-                        </div>
-                        <p className="mt-1 text-[13px] leading-relaxed text-amber-950/80">
-                          {s.detail}
-                        </p>
-                        {s.quote ? (
-                          <p className="mt-2 font-mono text-[12px] italic text-amber-800">
-                            “{s.quote}”
-                          </p>
-                        ) : null}
-                        {s.better_approach ? (
-                          <div className="mt-2.5 rounded-md bg-white p-2.5 text-[13px]">
-                            <span className="font-semibold text-slate-900">Better approach: </span>
-                            <span className="text-slate-700">{s.better_approach}</span>
-                          </div>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          className="mt-3 font-semibold"
-                          onClick={() => retryMoment.mutate(i)}
-                          disabled={retryMoment.isPending}
-                          data-testid={`retry-moment-${i}`}
-                        >
-                          {retryMoment.isPending ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <RotateCcw className="size-3.5" />
-                          )}
-                          Retry that moment
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+                <StrengthsSection strengths={evaluation.strengths} />
+                <MissesSection
+                  misses={evaluation.misses}
+                  onRetry={(i) => retryMoment.mutate(i)}
+                  retrying={retryMoment.isPending}
+                />
               </div>
             </div>
 
