@@ -1,0 +1,220 @@
+{
+  "project_name": "VocalPitch AI — Flight Simulator for Sales Conversations",
+  "archetype": "The Performance Pro & High-Contrast Swiss B2B SaaS",
+  "theme": "Light Default with High-Contrast Dark Cockpit Simulation Mode",
+  "colors": {
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "link": "#2563EB",
+          "error": "#DC2626",
+          "success": "#16A34A",
+          "warning": "#D97706",
+          "accent_badge": "#1D4ED8"
+        }
+      },
+      {
+        "name": "panel",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "link": "#2563EB",
+          "error": "#DC2626",
+          "success": "#16A34A",
+          "warning": "#D97706",
+          "border": "#E2E8F0"
+        }
+      },
+      {
+        "name": "subtle_card",
+        "kind": "solid",
+        "bg": "#F1F5F9",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569"
+      },
+      {
+        "name": "cockpit_simulation_surface",
+        "kind": "solid",
+        "bg": "#090D16",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "link": "#60A5FA",
+          "error": "#F87171",
+          "success": "#4ADE80",
+          "warning": "#FBBF24",
+          "live_indicator": "#EF4444",
+          "mic_active": "#3B82F6",
+          "border": "#1E293B"
+        }
+      },
+      {
+        "name": "cockpit_panel",
+        "kind": "solid",
+        "bg": "#111827",
+        "on_bg": "#F9FAFB",
+        "on_bg_muted": "#9CA3AF",
+        "roles": {
+          "accent": "#38BDF8",
+          "border": "#1F2937"
+        }
+      },
+      {
+        "name": "tag_strong_question",
+        "kind": "solid",
+        "bg": "#DCFCE7",
+        "on_bg": "#166534",
+        "on_bg_muted": "#15803D"
+      },
+      {
+        "name": "tag_objection",
+        "kind": "solid",
+        "bg": "#FEF3C7",
+        "on_bg": "#92400E",
+        "on_bg_muted": "#B45309"
+      },
+      {
+        "name": "tag_missed_opp",
+        "kind": "solid",
+        "bg": "#FEE2E2",
+        "on_bg": "#991B1B",
+        "on_bg_muted": "#B91C1C"
+      },
+      {
+        "name": "tag_closing_signal",
+        "kind": "solid",
+        "bg": "#EDE9FE",
+        "on_bg": "#5B21B6",
+        "on_bg_muted": "#6D28D9"
+      },
+      {
+        "name": "hero_banner",
+        "kind": "gradient",
+        "contrast_against": "#0B1528",
+        "guarantee": "scrim: linear-gradient(135deg, #0B1528 0%, #1E293B 100%)",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#CBD5E1",
+        "roles": {
+          "link": "#93C5FD",
+          "error": "#FCA5A5",
+          "success": "#86EFAC"
+        }
+      }
+    ],
+    "accent": "#2563EB",
+    "on_accent": "#FFFFFF",
+    "accent_hover": "#1D4ED8",
+    "semantic": {
+      "success": "#16A34A",
+      "warning": "#D97706",
+      "danger": "#DC2626",
+      "info": "#0284C7",
+      "xp_gold": "#D97706",
+      "streak_flame": "#EA580C"
+    }
+  },
+  "typography": {
+    "font_headings": "Plus Jakarta Sans Variable, sans-serif",
+    "font_body": "DM Sans Variable, sans-serif",
+    "font_mono": "IBM Plex Mono, monospace",
+    "scale_px": {
+      "display": 56,
+      "h1": 40,
+      "h2": 30,
+      "h3": 22,
+      "h4": 18,
+      "body": 16,
+      "caption": 14
+    },
+    "letter_spacing": {
+      "display": "-0.03em",
+      "h1": "-0.025em",
+      "h2": "-0.02em",
+      "labels": "0.15em"
+    }
+  },
+  "entry_surfaces": {
+    "/": "split hero with enterprise positioning & prominent 'Start Simulation' demo launcher left, dynamic live simulation preview card + seed metrics right",
+    "/training": "tactical exercise grid categorized with 5-level difficulty selector and pre-call brief launcher modal",
+    "/simulation": "dark tactical cockpit simulator view with AI prospect dossier, live dual audio visualizer, call timer, and active audio controls",
+    "/scorecard": "executive post-call performance scorecard with circular grade gauge, 14-dimension breakdown, speech metrics, coaching priorities, and annotated transcript",
+    "/progress": "skill progression matrix with historical radar/recharts trends, difficulty tier unlocks, and XP streak tracker",
+    "/history": "searchable, filterable audit log of past sessions with instant scorecard re-inspection",
+    "/profile": "professional gamification hub with tier badges, simulation streaks, personal bests, and audio input setup"
+  },
+  "layouts": {
+    "app_shell": "Sticky glass topbar with primary nav (Dashboard, Training, Progress, History, Profile) + Quick Simulator CTA ('Flight Sim') + Level/XP Badge + Quick Stats pill",
+    "dashboard_grid": "Bento Grid: Hero Practice Banner (col-span-8), Quick Recommended Exercise (col-span-4), Performance Metrics Row (4 stat cards), Improvement Trend Recharts Area (col-span-8), Strongest/Weakest Skills Diagnostic (col-span-4), Recent Call History Table (col-span-12)",
+    "simulation_cockpit": "Full-height dedicated tactical cockpit (Dark Slate #090D16). Top: Briefing header (Scenario, Prospect, Objective, Level, Timer). Center: Split audio visualizer (Rep Speaking Waveform vs AI Prospect Voice Pulse & Avatar). Bottom: Control console (Mic Toggle, Push-to-Talk, End Call & Grade Button, Call Note taker)",
+    "scorecard_layout": "Top: Call summary bar + Overall Score (0-100 Radial/Gauge). Row 2: Category Score Breakdown (14 competencies with benchmarks). Row 3: 'What You Did Well' (Green cards) vs 'Missed Opportunities & Coaching Priorities' (Amber/Red cards with audio/quote references). Row 4: Communication Analytics (Talk vs Listen donut, Questions per min, Filler word meter, Avg response cadence). Row 5: Full Interactive Transcript with colored tag filters"
+  },
+  "visual_enhancers": {
+    "borders": "1px solid #E2E8F0 in light mode, 1px solid #1E293B in simulation cockpit mode",
+    "shadows": "shadow-sm for standard cards, shadow-[0_12px_32px_rgba(15,23,42,0.08)] for modals and primary flight cards",
+    "audio_visualizer": "Smooth canvas-based or CSS multi-bar responsive audio frequency visualizer with real-time reactive pulse during speech and TTS playback",
+    "coaching_quotes": "Border-l-4 with tinted background, timestamp badge, and 'Better Alternative' highlighted text diff"
+  },
+  "motion": {
+    "page_transitions": "Fade in with 0.2s ease-out",
+    "voice_waves": "Smooth rhythmic pulsing waves when AI/User speaks, CSS keyframes with 80-120ms spring physics",
+    "score_counter": "Staggered score bar fill animation and animated numeric countup on scorecard load",
+    "tabs": "Smooth spring sliding pill indicator"
+  },
+  "accessibility": {
+    "contrast_standard": "WCAG AA minimum 4.5:1 for all text against backgrounds",
+    "live_regions": "aria-live='polite' for AI voice transcription and speech-to-text recognition feedback",
+    "keyboard_controls": "Spacebar to toggle mic / Push-to-Talk, Escape to open pause/exit dialog",
+    "data_testids": "Strict kebab-case testids on all buttons, forms, metric cards, audio controls, and scorecard items"
+  },
+  "image_urls": {
+    "prospect_avatars": [
+      {
+        "role": "VP of Engineering (Cold Call Target)",
+        "name": "Marcus Vance",
+        "company": "Apex Cloud Systems",
+        "url": "https://images.unsplash.com/photo-1560250097-0b93528c311a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGV4ZWN1dGl2ZSUyMHBvcnRyYWl0fGVufDB8fHx8MTc4NzcwNjc3Mnww&ixlib=rb-4.1.0&q=85"
+      },
+      {
+        "role": "Chief Revenue Officer (Discovery Call)",
+        "name": "Sarah Jenkins",
+        "company": "Nexus Enterprise Data",
+        "url": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGV4ZWN1dGl2ZSUyMHBvcnRyYWl0fGVufDB8fHx8MTc4NzcwNjc3Mnww&ixlib=rb-4.1.0&q=85"
+      },
+      {
+        "role": "Director of Procurement (Objection Handling)",
+        "name": "David Sterling",
+        "company": "Global Logistics Corp",
+        "url": "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGV4ZWN1dGl2ZSUyMHBvcnRyYWl0fGVufDB8fHx8MTc4NzcwNjc3Mnww&ixlib=rb-4.1.0&q=85"
+      },
+      {
+        "role": "Chief Operating Officer (Closing Scenario)",
+        "name": "Elena Rostova",
+        "company": "OmniHealth Logistics",
+        "url": "https://images.pexels.com/photos/27086922/pexels-photo-27086922.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+      }
+    ],
+    "company_context": [
+      {
+        "description": "Executive boardroom meeting context",
+        "url": "https://images.unsplash.com/photo-1573164574572-cb89e39749b4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwxfHxlbnRlcnByaXNlJTIwdGVjaG5vbG9neSUyMG9mZmljZSUyMHRlYW0lMjBtZWV0aW5nfGVufDB8fHx8MTc4NzcwNjc3Mnww&ixlib=rb-4.1.0&q=85"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. Setup typography in frontend/src/index.css with @import '@fontsource-variable/plus-jakarta-sans'; and @import '@fontsource-variable/dm-sans'; and @import '@fontsource/ibm-plex-mono';",
+    "2. Implement a complete, fully interactive voice simulator utilizing browser SpeechRecognition (webkitSpeechRecognition) and SpeechSynthesis (or robust realistic audio simulation fallback with realistic turn-taking, realistic prospect responses, timer, audio frequency canvas visualization, and transcript recording).",
+    "3. Implement the 8 standard exercise types: Cold Call, Discovery, Objection Handling, Closing, Value Statement, 30-Second Commercial, In-Person Meeting, Phone Sales.",
+    "4. Implement the 5 difficulty levels: Level 1 (Warm Prospect), Level 2 (Curious Skeptic), Level 3 (Time-Pressed Gatekeeper), Level 4 (Aggressive Negotiator), Level 5 (Hostile C-Suite).",
+    "5. Include Pre-Call Briefing modal/drawer before launching into the Cockpit with prospect persona, company pain points, budget context, and clear session win condition.",
+    "6. Build comprehensive Post-Call AI Scorecard evaluating the 14 defined sales competencies (Opening, Rapport, Discovery, Question Quality, Active Listening, Pain Identification, Qualification, Value Communication, Objection Handling, Conversational Control, Confidence, Clarity, Closing, Next Steps), Talk-to-Listen ratio, Question Breakdown (Open vs Closed), Filler Word Tracker, and Tagged Transcript with coaching quotes.",
+    "7. Implement full Dashboard, Training catalog, Progress analytics with Recharts (skill trends, category radar), History review list, and Profile with XP/Levels/Badges/Streak system.",
+    "8. Ensure every button, input, tab, card, and metric has an explicit data-testid attribute."
+  ]
+}
