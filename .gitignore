@@ -84,3 +84,11 @@ android-sdk/
 # Testing workspace artifacts
 /tests/test-results/
 
+
+# Secrets — never commit real credentials (see backend/.env.example)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+!backend/.env.example

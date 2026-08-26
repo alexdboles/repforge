@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib.catalog import (
     DIFFICULTIES,
@@ -8,6 +8,7 @@ from lib.catalog import (
     exercise_by_id,
     scenarios_for_exercise,
 )
+from lib.auth import current_user, require_self
 from lib.db import db
 from lib.journeys import JOURNEYS, journey_by_id, public_journey
 from models.schemas import Difficulty, Exercise, JourneyView, ScenarioBrief
@@ -65,7 +66,8 @@ async def list_stages():
 
 
 @router.get("/users/{user_id}/journeys", response_model=list[JourneyView])
-async def list_journeys(user_id: str):
+async def list_journeys(user_id: str, me: dict = Depends(current_user)):
+    require_self(user_id, me)
     sims = await db.simulations.find(
         {"user_id": user_id, "status": "completed"}, {"_id": 0}
     ).to_list(500)

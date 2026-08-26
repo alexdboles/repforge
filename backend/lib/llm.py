@@ -16,26 +16,32 @@ load_dotenv()
 
 MODEL_PROVIDER = "anthropic"
 MODEL_NAME = "claude-sonnet-4-5-20250929"
+OPENAI_MODEL = "gpt-5.4"
 
 
 class LlmUnavailable(Exception):
     """Raised when no LLM credential is configured."""
 
 
-def _key() -> str:
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
+def _credential() -> tuple[str, str, str]:
+    """The rep's own OpenAI key wins; the Emergent universal key is the fallback."""
+    openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if openai_key:
+        return openai_key, "openai", OPENAI_MODEL
+    key = os.environ.get("EMERGENT_LLM_KEY", "").strip()
     if not key:
         raise LlmUnavailable(
-            "EMERGENT_LLM_KEY is not configured in backend/.env — the AI prospect "
-            "and coaching engine require it."
+            "No LLM credential is configured in backend/.env (OPENAI_API_KEY or "
+            "EMERGENT_LLM_KEY) — the AI prospect and coaching engine require one."
         )
-    return key
+    return key, MODEL_PROVIDER, MODEL_NAME
 
 
 def _chat(session_id: str, system_message: str) -> LlmChat:
+    key, provider, model = _credential()
     return LlmChat(
-        api_key=_key(), session_id=session_id, system_message=system_message
-    ).with_model(MODEL_PROVIDER, MODEL_NAME)
+        api_key=key, session_id=session_id, system_message=system_message
+    ).with_model(provider, model)
 
 
 def memory_block(prior: str) -> str:
@@ -51,6 +57,24 @@ def memory_block(prior: str) -> str:
         'impatiently (e.g. "I told you that when you called me"). Never pretend it is new.\n'
         "- What you already volunteered stays known. What they never earned is still hidden.\n\n"
     )
+
+
+SPOKEN_RULES = """
+SPOKEN CONVERSATION RULES — you are talking out loud on a live call, not writing:
+- Usually 1-3 sentences. Most replies under 30 spoken words.
+- Contractions always. Occasional brief acknowledgements: "yeah", "okay", "right", "sure", "hmm", "I see".
+- Natural hesitation and unfinished thoughts are good. Silence and very short answers are allowed.
+- No bullet points, no markdown, no stage directions like "(pauses)" or "[skeptical]" — express it in the wording.
+- Do not repeat the salesperson's name. Do not end every reply with a question.
+- Never sound polite-and-helpful like an assistant. You are the buyer.
+- If they ramble, cut in: "Okay, hang on—", "Yeah, but what does that cost?"
+- If they ask something vague, do not volunteer every useful fact.
+
+BAD: "Thank you for that information. Could you elaborate on the potential benefits?"
+GOOD: "Okay… but what does something like this actually cost?"
+BAD: "I understand your proposition and appreciate your explanation."
+GOOD: "Yeah, maybe. I'm just not sure we'd actually use it."
+"""
 
 
 def prospect_system_prompt(
@@ -72,7 +96,8 @@ OBJECTIONS you may naturally raise when it fits: {'; '.join(scenario['objections
 
 DIFFICULTY: Level {difficulty['level']} — {difficulty['name']}. Behave exactly like this: {difficulty['behavior']}
 
-{memory}HARD RULES:
+{memory}{SPOKEN_RULES}
+HARD RULES:
 - Stay 100% in character. NEVER coach, evaluate, hint, or mention that this is training or that you are an AI. No meta-commentary, ever.
 - Speak like a real person on a call: 1-3 sentences, contractions, occasional hesitation ("uh", "look", "honestly"), sometimes an incomplete thought. NEVER use bullet points, markdown, stage directions, or asterisks.
 - React to quality. Vague claims → push back or ask "what does that actually mean?". Premature pitching → get impatient, look at the clock, or disengage. Genuinely insightful questions → open up a little more and get more engaged.

@@ -2,9 +2,10 @@ import logging
 import random
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib.analytics import summarize
+from lib.auth import current_user, rate_limit, require_owned, require_self
 from lib.catalog import (
     difficulty_by_level,
     exercise_by_id,
@@ -75,24 +76,37 @@ def _shield(sim: dict) -> dict:
     return {**sim, "scenario": scenario}
 
 
-async def _load(sim_id: str) -> dict:
+async def _load(sim_id: str, me: dict) -> dict:
+    """Load a simulation the caller owns. A foreign id looks identical to a
+    missing one, so simulation ids cannot be enumerated."""
     sim = await db.simulations.find_one({"id": sim_id}, {"_id": 0})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
+    require_owned(sim, me, "Simulation")
     return sim
 
 
 @router.post("/simulations", response_model=Simulation)
-async def start_simulation(payload: SimulationStart):
+async def start_simulation(payload: SimulationStart, me: dict = Depends(current_user)):
+    # Identity comes from the session cookie; a user_id in the body is ignored.
+    payload.user_id = me["id"]
+    rate_limit(
+        f"start:{me['id']}", 40, 3600, "Too many simulations started. Please wait a few minutes."
+    )
+    active = await db.simulations.count_documents(
+        {"user_id": me["id"], "status": "active"}
+    )
+    if active >= 3:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have live simulations open. End one before starting another.",
+        )
     exercise = exercise_by_id(payload.exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Unknown exercise")
     difficulty = difficulty_by_level(payload.difficulty)
     if not difficulty:
         raise HTTPException(status_code=422, detail="Difficulty must be 1-5")
-    user = await db.users.find_one({"id": payload.user_id}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
 
     if payload.journey_id:
         journey = journey_by_id(payload.journey_id)
@@ -110,6 +124,7 @@ async def start_simulation(payload: SimulationStart):
         )
         if not custom:
             raise HTTPException(status_code=404, detail="Custom scenario not found")
+        require_owned(custom, me, "Custom scenario")
         scenario = _scenario_from_custom(custom)
     else:
         scenario = (
@@ -149,17 +164,32 @@ async def start_simulation(payload: SimulationStart):
 
 
 @router.post("/simulations/{sim_id}/turns", response_model=TurnResponse)
-async def add_turn(sim_id: str, payload: TurnRequest):
-    text = payload.text.strip()
+async def add_turn(
+    sim_id: str, payload: TurnRequest, me: dict = Depends(current_user)
+):
+    text = payload.text.strip()[:2000]
     if not text:
         raise HTTPException(status_code=422, detail="Empty utterance")
-    sim = await _load(sim_id)
+    rate_limit(f"turn:{me['id']}", 240, 3600, "Too many turns. Please slow down.")
+    sim = await _load(sim_id, me)
     if sim["status"] != "active":
         raise HTTPException(status_code=409, detail="Simulation already completed")
+    if len(sim.get("transcript") or []) >= 120:
+        raise HTTPException(
+            status_code=409,
+            detail="This call has reached its maximum length — end it to get your scorecard.",
+        )
 
     exercise = exercise_by_id(sim["exercise_id"])
     difficulty = difficulty_by_level(sim["difficulty"])
     transcript = sim.get("transcript") or []
+    # Persist what the rep said BEFORE the LLM call. Ending the call mid-generation
+    # must still grade the words they actually spoke, and the prospect's late reply
+    # must never be able to arrive without them.
+    await db.simulations.update_one(
+        {"id": sim_id},
+        {"$push": {"transcript": {"speaker": "rep", "text": text, "at": payload.at}}},
+    )
     try:
         reply = await prospect_turn(
             sim_id,
@@ -170,27 +200,30 @@ async def add_turn(sim_id: str, payload: TurnRequest):
             text,
             sim.get("prior_context") or "",
         )
-    except LlmUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
+    except (LlmUnavailable, Exception) as exc:  # noqa: BLE001
+        # Roll the rep's line back so the client's retry cannot duplicate it.
+        await db.simulations.update_one({"id": sim_id}, {"$pop": {"transcript": 1}})
+        if isinstance(exc, LlmUnavailable):
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         logger.exception("prospect turn failed")
         raise HTTPException(
-            status_code=502, detail=f"AI prospect could not be reached: {exc}"
+            status_code=502, detail="The AI prospect could not be reached."
         ) from exc
 
-    new_turns = [
-        {"speaker": "rep", "text": text, "at": payload.at},
-        {"speaker": "prospect", "text": reply, "at": payload.at},
-    ]
-    await db.simulations.update_one(
-        {"id": sim_id}, {"$push": {"transcript": {"$each": new_turns}}}
+    # The call may have been ended while the prospect was "thinking": the reply is
+    # then dropped entirely — it never reaches the transcript or the scoring.
+    stored = await db.simulations.update_one(
+        {"id": sim_id, "status": "active"},
+        {"$push": {"transcript": {"speaker": "prospect", "text": reply, "at": payload.at}}},
     )
+    if stored.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This call has already ended.")
     return TurnResponse(reply=reply, turn_index=len(transcript) + 1)
 
 
 @router.post("/simulations/{sim_id}/complete", response_model=Simulation)
-async def complete_simulation(sim_id: str):
-    sim = await _load(sim_id)
+async def complete_simulation(sim_id: str, me: dict = Depends(current_user)):
+    sim = await _load(sim_id, me)
     if sim["status"] == "completed":
         return Simulation(**_shield(sim))
     transcript = sim.get("transcript") or []
@@ -200,6 +233,14 @@ async def complete_simulation(sim_id: str):
             status_code=422,
             detail="No salesperson speech was captured — say something to the prospect before ending the call.",
         )
+
+    # Idempotency guard: two rapid End clicks must not produce two analyses or
+    # double XP. The first request flips the row to "analyzing"; the second bounces.
+    claim = await db.simulations.update_one(
+        {"id": sim_id, "status": "active"}, {"$set": {"status": "analyzing"}}
+    )
+    if claim.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This call is already being graded.")
 
     ended = datetime.now(timezone.utc)
     duration = max(1, int((ended - _aware(sim["started_at"])).total_seconds()))
@@ -219,11 +260,13 @@ async def complete_simulation(sim_id: str):
         )
         evaluation = Evaluation(**raw)
     except LlmUnavailable as exc:
+        await db.simulations.update_one({"id": sim_id}, {"$set": {"status": "active"}})
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.exception("evaluation failed")
+        logger.exception("evaluation failed for simulation %s", sim_id)
+        await db.simulations.update_one({"id": sim_id}, {"$set": {"status": "active"}})
         raise HTTPException(
-            status_code=502, detail=f"Coaching analysis failed: {exc}"
+            status_code=502, detail="Coaching analysis failed. Please try ending the call again."
         ) from exc
 
     xp = round(evaluation.overall_score / 2) + sim["difficulty"] * 10
@@ -287,9 +330,10 @@ async def _award(user_id: str, xp: int) -> None:
 
 
 @router.post("/simulations/{sim_id}/retry", response_model=Simulation)
-async def retry_simulation(sim_id: str):
+async def retry_simulation(sim_id: str, me: dict = Depends(current_user)):
     """Re-run the exact same prospect and difficulty, so attempts are comparable."""
-    old = await _load(sim_id)
+    rate_limit(f"start:{me['id']}", 40, 3600, "Too many simulations started. Please wait a few minutes.")
+    old = await _load(sim_id, me)
     exercise = exercise_by_id(old["exercise_id"])
     difficulty = difficulty_by_level(old["difficulty"])
     if not exercise or not difficulty:
@@ -321,12 +365,13 @@ async def retry_simulation(sim_id: str):
 
 
 @router.get("/simulations/{sim_id}", response_model=Simulation)
-async def get_simulation(sim_id: str):
-    return Simulation(**_shield(await _load(sim_id)))
+async def get_simulation(sim_id: str, me: dict = Depends(current_user)):
+    return Simulation(**_shield(await _load(sim_id, me)))
 
 
 @router.get("/users/{user_id}/simulations", response_model=list[SimulationSummary])
-async def list_simulations(user_id: str):
+async def list_simulations(user_id: str, me: dict = Depends(current_user)):
+    require_self(user_id, me)
     sims = (
         await db.simulations.find({"user_id": user_id}, {"_id": 0})
         .sort("started_at", -1)
@@ -400,9 +445,10 @@ async def journey_memory(user_id: str, journey_id: str | None) -> str:
 
 
 @router.get("/simulations/{sim_id}/hint", response_model=Hint)
-async def get_hint(sim_id: str):
+async def get_hint(sim_id: str, me: dict = Depends(current_user)):
     """Live coaching rail — only offered on the two teaching difficulties."""
-    sim = await _load(sim_id)
+    rate_limit(f"hint:{me['id']}", 120, 3600, "Too many coaching hints. Please slow down.")
+    sim = await _load(sim_id, me)
     if sim["difficulty"] > 2:
         raise HTTPException(
             status_code=409,

@@ -1,5 +1,5 @@
-import { Link, Navigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Area,
   AreaChart,
@@ -19,13 +19,16 @@ import {
   GraduationCap,
   TrendingDown,
   TrendingUp,
+  Loader2,
+  Zap,
 } from "lucide-react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { toast } from "sonner";
 import { getUserId, formatDuration, scoreTone } from "@/lib/profile";
-import type { Dashboard as DashboardData } from "@/lib/types";
+import type { Dashboard as DashboardData, Simulation as SimulationRef } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { DifficultyPips, EmptyState, ScoreRing, SkillBar, StatCard } from "@/components/Metrics";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
@@ -64,6 +67,8 @@ export default function Dashboard() {
             <ArrowRight className="size-4" />
           </Link>
         </div>
+
+        <DemoLaunch userId={userId} />
 
         {d?.nudge ? (
           <div
@@ -540,5 +545,61 @@ export default function Dashboard() {
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+/** Zero-setup entry point: one click starts a pre-configured cold call so a
+ * first-time user (or a judge) reaches the core loop in seconds. */
+function DemoLaunch({ userId }: { userId: string }) {
+  const navigate = useNavigate();
+  const launch = useMutation({
+    mutationFn: () =>
+      apiPost<SimulationRef>("/simulations", {
+        user_id: userId,
+        exercise_id: "cold-call",
+        difficulty: 2,
+        scenario_id: "crm-vp-sales",
+      }),
+    onSuccess: (sim) => navigate(`/simulation/${sim.id}`),
+    onError: () => toast.error("Could not start the demo call. Please try again."),
+  });
+
+  return (
+    <section
+      className="mt-6 flex flex-wrap items-center gap-5 rounded-xl border border-[#1E293B] bg-[#0F172A] p-6 text-slate-100"
+      data-testid="demo-launch-card"
+    >
+      <div className="min-w-0 flex-1">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          No setup required
+        </span>
+        <h2 className="mt-2 font-heading text-[21px] font-extrabold tracking-[-0.01em]">
+          Try a 2-minute demo call
+        </h2>
+        <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-slate-400">
+          Cold call Jordan Miller, VP of Sales, at Level 2. Speak for two minutes, end the call and
+          read your AI scorecard — the whole loop, nothing to configure.
+        </p>
+      </div>
+      <Button
+        size="lg"
+        onClick={() => launch.mutate()}
+        disabled={launch.isPending}
+        className="bg-slate-100 font-semibold text-slate-900 hover:bg-white"
+        data-testid="demo-launch-button"
+      >
+        {launch.isPending ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Dialling Jordan…
+          </>
+        ) : (
+          <>
+            <Zap className="size-4" />
+            Start the demo call
+          </>
+        )}
+      </Button>
+    </section>
   );
 }

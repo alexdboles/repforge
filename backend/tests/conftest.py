@@ -45,3 +45,26 @@ async def aclient():
 
 
 # --- app-specific fixtures below this line ---
+
+import uuid
+
+
+def signup_user(name_prefix: str, timeout: float = 60.0) -> tuple[httpx.Client, str, str]:
+    """Sign up a fresh tscheck user and return (client, user_id, token).
+
+    The client carries both the session cookie (set by the server) and an
+    Authorization bearer header, matching the dual auth scheme described in
+    the briefing (cookie + bearer fallback).
+    """
+    email = f"{name_prefix}-{uuid.uuid4().hex[:10]}@example.com"
+    c = httpx.Client(base_url=API_URL, timeout=timeout)
+    r = c.post(
+        "/auth/signup",
+        json={"name": name_prefix, "email": email, "password": "Practice2026!"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    user_id = body["user"]["id"]
+    token = body["token"]
+    c.headers["Authorization"] = f"Bearer {token}"
+    return c, user_id, token

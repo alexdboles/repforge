@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Mic, BarChart3, Sparkles, ShieldCheck, Clock, Users } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost } from "@/lib/api";
-import { getUserId, setUserId } from "@/lib/profile";
-import type { Exercise, UserProfile } from "@/lib/types";
+import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { clearToken, getUserId, setToken, setUserId } from "@/lib/profile";
+import type { Exercise, SessionResponse, UserProfile } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -29,25 +29,28 @@ const STEPS = [
 ];
 
 export default function Landing() {
-  const navigate = useNavigate();
-  const [name, setName] = useState("");
   const existing = getUserId();
+  // A valid session cookie may outlive the cached id (new device tab, cleared
+  // storage): ask the server who we are before showing the sign-in form.
+  const { data: session, error: sessionError } = useQuery({
+    queryKey: ["session"],
+    queryFn: () => apiGet<UserProfile>("/auth/me"),
+    enabled: !existing,
+    retry: false,
+  });
+  useEffect(() => {
+    if (session) setUserId(session.id);
+  }, [session]);
+  useEffect(() => {
+    // No cached id and no valid session → drop any stale token so the form works.
+    if (!existing && sessionError) clearToken();
+  }, [existing, sessionError]);
+  const signedIn = Boolean(existing || session);
   const { data: exercises } = useQuery({
     queryKey: ["exercises"],
     queryFn: () => apiGet<Exercise[]>("/exercises"),
     retry: false,
   });
-
-  const create = useMutation({
-    mutationFn: (payload: { name: string }) => apiPost<UserProfile>("/users", payload),
-    onSuccess: (user) => {
-      setUserId(user.id);
-      navigate("/learn/cold-call?difficulty=2");
-    },
-    onError: () => toast.error("Could not create your profile. Please try again."),
-  });
-
-  const start = () => create.mutate({ name: name.trim() || "Demo Rep" });
 
   return (
     <div className="min-h-screen bg-background" data-testid="landing-page">
@@ -59,7 +62,7 @@ export default function Landing() {
             </span>
             <span className="font-heading text-[17px] font-extrabold tracking-tight">VocalPitch</span>
           </div>
-          {existing ? (
+          {signedIn ? (
             <Link
               to="/dashboard"
               data-testid="landing-goto-dashboard"
@@ -90,8 +93,8 @@ export default function Landing() {
             own words — and you can run the whole loop against your real product, not just ours.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            {existing ? (
+          <div className="mt-8">
+            {signedIn ? (
               <Link
                 to="/learn/cold-call?difficulty=2"
                 data-testid="landing-start-existing"
@@ -101,30 +104,12 @@ export default function Landing() {
                 <ArrowRight className="size-4" />
               </Link>
             ) : (
-              <>
-                <Input
-                  data-testid="landing-name-input"
-                  placeholder="Your name (optional)"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="h-11 sm:max-w-[240px]"
-                />
-                <Button
-                  size="lg"
-                  onClick={start}
-                  disabled={create.isPending}
-                  data-testid="landing-start-first-simulation"
-                  className="font-semibold"
-                >
-                  {create.isPending ? "Preparing your cockpit…" : "Start Your First Simulation"}
-                  <ArrowRight className="size-4" />
-                </Button>
-              </>
+              <AuthPanel />
             )}
           </div>
           <p className="mt-3 text-[12.5px] text-muted-foreground">
-            No setup. A pre-configured cold-call scenario is ready — you'll be talking to a prospect
-            in under a minute.
+            Your account keeps your scorecards, streak and buyer history. Prefer to look around
+            first? Continue as a guest — you can create an account later.
           </p>
 
           <dl className="mt-12 grid grid-cols-3 gap-6 border-t border-border pt-8">
@@ -240,6 +225,157 @@ export default function Landing() {
             : null}
         </div>
       </section>
+    </div>
+  );
+}
+
+
+/** Email + password accounts, with a guest session for first-time visitors and
+ * contest judges. Sessions live in an httpOnly cookie issued by the backend —
+ * no token is ever stored in the browser. */
+function AuthPanel() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+
+  const land = (session: SessionResponse) => {
+    setToken(session.token);
+    setUserId(session.user.id);
+    navigate("/dashboard");
+  };
+
+  const fail = (err: unknown, fallback: string) => {
+    const detail =
+      err instanceof ApiError && typeof (err.body as { detail?: string })?.detail === "string"
+        ? (err.body as { detail: string }).detail
+        : fallback;
+    toast.error(detail);
+  };
+
+  const signup = useMutation({
+    mutationFn: () =>
+      apiPost<SessionResponse>("/auth/signup", {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      }),
+    onSuccess: land,
+    onError: (e) => fail(e, "Could not create your account."),
+  });
+
+  const signin = useMutation({
+    mutationFn: () =>
+      apiPost<SessionResponse>("/auth/login", {
+        email: form.email.trim(),
+        password: form.password,
+      }),
+    onSuccess: land,
+    onError: (e) => fail(e, "Could not sign you in."),
+  });
+
+  const guest = useMutation({
+    mutationFn: () => apiPost<SessionResponse>("/auth/guest"),
+    onSuccess: land,
+    onError: (e) => fail(e, "Could not start a guest session."),
+  });
+
+  const busy = signup.isPending || signin.isPending || guest.isPending;
+  const active = mode === "signup" ? signup : signin;
+
+  return (
+    <div
+      className="max-w-[440px] rounded-xl border border-border bg-card p-5 shadow-sm"
+      data-testid="auth-panel"
+    >
+      <div className="flex gap-1 rounded-lg bg-secondary p-1">
+        {(["signup", "signin"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            data-testid={`auth-tab-${m}`}
+            className={cn(
+              "flex-1 rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors",
+              mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {m === "signup" ? "Create account" : "Sign in"}
+          </button>
+        ))}
+      </div>
+
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          active.mutate();
+        }}
+      >
+        {mode === "signup" ? (
+          <Input
+            data-testid="auth-name-input"
+            placeholder="Your name"
+            autoComplete="name"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            className="h-11"
+          />
+        ) : null}
+        <Input
+          data-testid="auth-email-input"
+          type="email"
+          placeholder="Work email"
+          autoComplete="email"
+          value={form.email}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          className="h-11"
+        />
+        <Input
+          data-testid="auth-password-input"
+          type="password"
+          placeholder={mode === "signup" ? "Password (8+ characters)" : "Password"}
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          value={form.password}
+          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+          className="h-11"
+        />
+        <Button
+          type="submit"
+          size="lg"
+          disabled={busy || !form.email.trim() || !form.password}
+          data-testid="auth-submit-button"
+          className="w-full font-semibold"
+        >
+          {active.isPending
+            ? "Preparing your cockpit…"
+            : mode === "signup"
+              ? "Create account & start"
+              : "Sign in"}
+          <ArrowRight className="size-4" />
+        </Button>
+      </form>
+
+      <div className="mt-4 flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          or
+        </span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={() => guest.mutate()}
+        disabled={busy}
+        data-testid="auth-guest-button"
+        className="mt-4 w-full font-semibold"
+      >
+        {guest.isPending ? "Starting guest session…" : "Continue as guest"}
+      </Button>
+      <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
+        Never enter passwords, financial account details or confidential customer data into
+        simulations — transcripts are stored against your account.
+      </p>
     </div>
   );
 }

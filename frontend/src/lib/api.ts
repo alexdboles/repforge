@@ -18,17 +18,39 @@ export class ApiError extends Error {
 
 type JsonBody = unknown;
 
+export function authHeaders(): Record<string, string> {
+  try {
+    const token = localStorage.getItem("vocalpitch.session_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(method: string, path: string, body?: JsonBody): Promise<T> {
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    credentials: "include",
+    headers:
+      body === undefined
+        ? authHeaders()
+        : { "Content-Type": "application/json", ...authHeaders() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   // FastAPI reports request-validation failures as 422 with a {detail: [...]} body.
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
+    // Session gone: forget the cached id so the app falls back to the sign-in screen.
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem("vocalpitch.user_id");
+        localStorage.removeItem("vocalpitch.session_token");
+      } catch {
+        /* storage unavailable */
+      }
+    }
     throw new ApiError(res.status, errBody);
   }
 

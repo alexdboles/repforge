@@ -1,9 +1,10 @@
 """Practice My Business: saved sales profiles + AI-generated custom scenarios."""
 import random
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib.catalog import difficulty_by_level, exercise_by_id
+from lib.auth import current_user, rate_limit, require_owned, require_self
 from lib.db import db
 from lib.llm import LlmUnavailable, generate_scenario
 from models.schemas import (
@@ -91,10 +92,10 @@ PUBLIC_SCENARIO_KEYS = (
 
 
 @router.post("/users/{user_id}/sales-profiles", response_model=SalesProfile)
-async def create_profile(user_id: str, payload: SalesProfileInput):
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+async def create_profile(
+    user_id: str, payload: SalesProfileInput, me: dict = Depends(current_user)
+):
+    require_self(user_id, me)
     if not payload.company.strip() or not payload.product.strip():
         raise HTTPException(status_code=422, detail="Company and product are required")
     profile = SalesProfile(user_id=user_id, **payload.model_dump())
@@ -103,7 +104,8 @@ async def create_profile(user_id: str, payload: SalesProfileInput):
 
 
 @router.get("/users/{user_id}/sales-profiles", response_model=list[SalesProfile])
-async def list_profiles(user_id: str):
+async def list_profiles(user_id: str, me: dict = Depends(current_user)):
+    require_self(user_id, me)
     docs = (
         await db.sales_profiles.find({"user_id": user_id}, {"_id": 0})
         .sort("created_at", -1)
@@ -113,25 +115,33 @@ async def list_profiles(user_id: str):
 
 
 @router.get("/sales-profiles/{profile_id}", response_model=SalesProfile)
-async def get_profile(profile_id: str):
+async def get_profile(profile_id: str, me: dict = Depends(current_user)):
     doc = await db.sales_profiles.find_one({"id": profile_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Sales profile not found")
+    require_owned(doc, me, "Sales profile")
     return SalesProfile(**doc)
 
 
 @router.patch("/sales-profiles/{profile_id}", response_model=SalesProfile)
-async def update_profile(profile_id: str, payload: SalesProfileInput):
+async def update_profile(
+    profile_id: str, payload: SalesProfileInput, me: dict = Depends(current_user)
+):
     doc = await db.sales_profiles.find_one({"id": profile_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Sales profile not found")
+    require_owned(doc, me, "Sales profile")
     updates = payload.model_dump()
     await db.sales_profiles.update_one({"id": profile_id}, {"$set": updates})
     return SalesProfile(**{**doc, **updates})
 
 
 @router.delete("/sales-profiles/{profile_id}")
-async def delete_profile(profile_id: str):
+async def delete_profile(profile_id: str, me: dict = Depends(current_user)):
+    doc = await db.sales_profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Sales profile not found")
+    require_owned(doc, me, "Sales profile")
     res = await db.sales_profiles.delete_one({"id": profile_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Sales profile not found")
@@ -139,10 +149,16 @@ async def delete_profile(profile_id: str):
 
 
 @router.post("/custom-scenarios", response_model=CustomScenario)
-async def create_custom_scenario(payload: CustomScenarioRequest):
+async def create_custom_scenario(
+    payload: CustomScenarioRequest, me: dict = Depends(current_user)
+):
+    rate_limit(
+        f"scenario:{me['id']}", 30, 3600, "Too many scenario builds. Please try again later."
+    )
     profile = await db.sales_profiles.find_one({"id": payload.profile_id}, {"_id": 0})
     if not profile:
         raise HTTPException(status_code=404, detail="Sales profile not found")
+    require_owned(profile, me, "Sales profile")
     exercise = exercise_by_id(payload.exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Unknown exercise")

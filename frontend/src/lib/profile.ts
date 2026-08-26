@@ -1,5 +1,34 @@
 // Lightweight local profile: the MVP identifies a rep by a stored user id.
 const KEY = "vocalpitch.user_id";
+// Session token fallback. The server's primary mechanism is an httpOnly cookie;
+// browsers that block third-party cookies (e.g. the app inside a preview iframe)
+// would otherwise loop back to the sign-in screen, so the same token is replayed
+// as an Authorization header.
+const TOKEN_KEY = "vocalpitch.session_token";
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 export function getUserId(): string | null {
   try {

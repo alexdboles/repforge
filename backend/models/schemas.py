@@ -198,6 +198,27 @@ class UserCreate(BaseModel):
     org: str = "Personal"
 
 
+class SignupRequest(BaseModel):
+    name: str = Field(max_length=80)
+    email: str = Field(max_length=200)
+    password: str = Field(max_length=200)
+    experience_level: str = Field(default="New", max_length=40)
+    org: str = Field(default="Personal", max_length=80)
+
+
+class SessionResponse(BaseModel):
+    """Sign-in result: the profile plus a bearer token for browsers that block
+    the session cookie (e.g. the app embedded in a preview iframe)."""
+
+    user: "UserProfile"
+    token: str
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(max_length=200)
+    password: str = Field(max_length=200)
+
+
 # ---------- simulations ----------
 class TranscriptTurn(BaseModel):
     speaker: Literal["rep", "prospect"]
@@ -292,7 +313,7 @@ class Simulation(BaseModel):
     difficulty: int
     difficulty_name: str
     scenario: dict[str, Any]
-    status: Literal["active", "completed"] = "active"
+    status: Literal["active", "analyzing", "completed"] = "active"
     mode: Literal["guided", "business", "journey"] = "guided"
     voice_persona: str = "default"
     journey_id: Optional[str] = None

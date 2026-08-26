@@ -1,0 +1,85 @@
+{
+  "iteration": 1,
+  "passed": 8,
+  "failed": 1,
+  "retest_needed": true,
+  "checks": [
+    {
+      "criterion": "Guest sign-in must not loop back to the sign-in screen",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Clicked auth-guest-button -> dashboard-page visible; localStorage['vocalpitch.session_token'] present; survived page.reload() and navigation to /training and /history without auth-panel reappearing."
+    },
+    {
+      "criterion": "Email + password signup and login work and persist",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Signup via auth-name/email/password + auth-submit-button -> /dashboard; profile-logout-button -> auth-panel; re-login with same email/password on Sign in tab -> /dashboard again; wrong password produced [data-sonner-toast][data-type=error] toast and stayed on auth-panel (dashboard-page not visible)."
+    },
+    {
+      "criterion": "Session works when browser cookies are unavailable (iframe / blocked cookies)",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "After guest login, page.context().clearCookies() then page.reload(): dashboard-page still visible (localStorage bearer token replay), and /training route did not bounce to auth-panel."
+    },
+    {
+      "criterion": "2-minute demo path from the dashboard",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "demo-launch-button -> URL matches /simulation/<id>, transcript-live shows Jordan Miller's opening line, no console errors and no HTTP>=400 responses recorded after the guest session was established."
+    },
+    {
+      "criterion": "End Simulation is a hard stop (AI kept talking / late speech pollution bug)",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "failed",
+      "evidence": "After sending a typed reply and clicking end-simulation-button (x2 rapid) while the turn was in flight, app never reached /scorecard/<id> (stayed on /simulation/<id> for 60s) and the prospect's reply ('Depends what you mean...') was appended to the transcript AFTER the end-simulation click, i.e. the AI kept talking. Screenshot evidence: end-simulation-hard-stop-failure.png. Root-caused via direct API repro below."
+    },
+    {
+      "criterion": "Voice layer has a fixed cast and no silent generic fallback",
+      "name": "voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "/voice-cast shows voice-cast-list with all 8 named characters, each row marked '<name> loaded' with a check icon; clicking 'Play preview' triggered POST /api/voice/speak -> 200, content-type audio/*. Simulation header showed 'ElevenLabs voice · Jordan' (see demo-launch screenshot)."
+    },
+    {
+      "criterion": "Training library shows the roadmap 'coming soon' cards",
+      "name": "training-library-coming-soon-cards",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "/training shows coming-soon-zoom-calls, coming-soon-screen-share-demo and coming-soon-multi-stakeholder all visible."
+    },
+    {
+      "criterion": "Authorization: no cross-user or anonymous access to data (API-level)",
+      "name": "test_tscheck_cross_user_idor_blocked.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "pytest: user B GET /api/users/{A_id}/dashboard -> 403; user B GET /api/simulations/{A_sim_id} -> 404; POST /api/simulations with spoofed user_id=B while authenticated as A -> created simulation belongs to A. 3 passed."
+    },
+    {
+      "criterion": "Authorization: anonymous access rejected (API-level)",
+      "name": "test_tscheck_unauthenticated_access_rejected.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "pytest, no session: GET /api/users/{id}/dashboard -> 401, GET /api/simulations/{id} -> 401, POST /api/voice/speak -> 401, POST /api/simulations -> 401. 1 passed."
+    }
+  ],
+  "bugs": [
+    {
+      "severity": "high",
+      "criterion": "End Simulation is a hard stop",
+      "description": "Ending a call immediately after sending a typed reply (while the reply is still in flight) does not hard-stop the conversation. Root cause in backend/routers/simulations.py add_turn(): the rep's own line is only appended to the transcript together with the AI prospect's reply, AFTER the prospect_turn() LLM call resolves (lines ~186-210). If POST /simulations/{id}/complete is called before that LLM call finishes, the transcript still has 0 rep turns, so complete() (lines 219-225) raises 422 'No salesperson speech was captured' even though the user already spoke and clicked End. Once the in-flight turn finally resolves, BOTH the rep line and the late prospect reply land in the transcript regardless of the end intent, i.e. the AI keeps talking and pollutes the transcript after the click, exactly the previously-reported bug. In the browser, this manifested as the app never reaching /scorecard and the prospect's reply appearing after the End click.",
+      "evidence": "Browser: screenshot end-simulation-hard-stop-failure.png shows Jordan Miller's second reply appended after End Simulation was clicked, URL stuck at /simulation/<id> for 60s. API repro (curl/httpx script): fired POST /simulations/{id}/turns then two concurrent POST /simulations/{id}/complete 0.4s later -> both complete calls returned 422 {\"detail\":\"No salesperson speech was captured — say something to the prospect before ending the call.\"}; final GET /simulations/{id} showed state=active, turns count=0 even after the turn call itself later succeeded with a reply."
+    }
+  ],
+  "action_items": [
+    {
+      "item": "Two pre-existing backend test files in /app/backend/tests/ (test_tscheck_negative_states.py, test_tscheck_hidden_intel_not_exposed.py) fail with a test-authoring bug (client used both as a fixture-managed context and re-entered via `with c:` inside the test body -> 'Cannot open a client instance more than once'). These do not correspond to any criterion in the current briefing's acceptance_matrix, so they were not counted in passed/failed above, but they are left in the repo failing and should be fixed or removed in a future iteration.",
+      "severity": "low"
+    }
+  ]
+}

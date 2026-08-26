@@ -59,6 +59,7 @@ async def get_status_checks():
     return [StatusCheck(**status_check) for status_check in status_checks]
 
 from routers import (  # noqa: E402
+    auth,
     curriculum,
     insights,
     sales_profiles,
@@ -68,6 +69,7 @@ from routers import (  # noqa: E402
     voice,
 )
 
+api_router.include_router(auth.router)
 api_router.include_router(training.router)
 api_router.include_router(users.router)
 api_router.include_router(simulations.router)

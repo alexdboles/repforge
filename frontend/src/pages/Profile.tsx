@@ -3,8 +3,8 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, Flame, LogOut, Trophy, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPatch } from "@/lib/api";
-import { clearUserId, formatDuration, getUserId } from "@/lib/profile";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { clearToken, clearUserId, formatDuration, getUserId } from "@/lib/profile";
 import type { Dashboard as DashboardData, UserProfile } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { StatCard } from "@/components/Metrics";
@@ -135,16 +135,19 @@ export default function Profile() {
             <div className="mt-6 border-t border-border pt-5">
               <Button
                 variant="ghost"
-                onClick={() => {
+                onClick={async () => {
+                  // Server-side session teardown first, then clear local caches.
+                  await apiPost("/auth/logout").catch(() => undefined);
                   clearUserId();
+                  clearToken();
                   qc.clear();
                   navigate("/");
                 }}
-                data-testid="profile-switch-user"
+                data-testid="profile-logout-button"
                 className="text-muted-foreground"
               >
                 <LogOut className="size-4" />
-                Switch rep
+                Sign out
               </Button>
             </div>
           </section>

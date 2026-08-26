@@ -1,8 +1,9 @@
 """Attempt comparison and the org-level team view."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib.analytics import build_skills, build_exercise_stats
 from lib.catalog import difficulty_by_level, exercise_by_id
+from lib.auth import current_user, require_org, require_self
 from lib.db import db
 from models.schemas import (
     Assignment,
@@ -29,7 +30,8 @@ async def _completed(query: dict) -> list[dict]:
 
 
 @router.post("/users/{user_id}/trained/{exercise_id}")
-async def mark_trained(user_id: str, exercise_id: str):
+async def mark_trained(user_id: str, exercise_id: str, me: dict = Depends(current_user)):
+    require_self(user_id, me)
     if not exercise_by_id(exercise_id):
         raise HTTPException(status_code=404, detail="Unknown exercise")
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
@@ -41,7 +43,8 @@ async def mark_trained(user_id: str, exercise_id: str):
 
 
 @router.get("/users/{user_id}/attempts/{exercise_id}", response_model=AttemptSeries)
-async def attempt_series(user_id: str, exercise_id: str):
+async def attempt_series(user_id: str, exercise_id: str, me: dict = Depends(current_user)):
+    require_self(user_id, me)
     exercise = exercise_by_id(exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Unknown exercise")
@@ -87,8 +90,9 @@ async def attempt_series(user_id: str, exercise_id: str):
 
 
 @router.get("/teams/{org}", response_model=TeamView)
-async def team_view(org: str):
-    users = await db.users.find({"org": org}, {"_id": 0}).to_list(200)
+async def team_view(org: str, me: dict = Depends(current_user)):
+    require_org(org, me)
+    users = await db.users.find({"org": org}, {"_id": 0, "password": 0}).to_list(200)
     if not users:
         raise HTTPException(status_code=404, detail="No reps in this organisation yet")
 
@@ -171,10 +175,14 @@ async def team_view(org: str):
 
 
 @router.post("/assignments", response_model=Assignment)
-async def create_assignment(payload: AssignmentCreate):
-    user = await db.users.find_one({"id": payload.user_id}, {"_id": 0})
+async def create_assignment(payload: AssignmentCreate, me: dict = Depends(current_user)):
+    user = await db.users.find_one({"id": payload.user_id}, {"_id": 0, "password": 0})
     if not user:
         raise HTTPException(status_code=404, detail="Rep not found")
+    # Tenant boundary: you may only assign training inside your own organisation.
+    require_org(user.get("org", ""), me)
+    if payload.org:
+        require_org(payload.org, me)
     exercise = exercise_by_id(payload.exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Unknown exercise")
@@ -197,7 +205,8 @@ async def create_assignment(payload: AssignmentCreate):
 
 
 @router.get("/users/{user_id}/assignments", response_model=list[Assignment])
-async def list_user_assignments(user_id: str):
+async def list_user_assignments(user_id: str, me: dict = Depends(current_user)):
+    require_self(user_id, me)
     docs = (
         await db.assignments.find({"user_id": user_id}, {"_id": 0})
         .sort("created_at", -1)
@@ -207,7 +216,8 @@ async def list_user_assignments(user_id: str):
 
 
 @router.get("/teams/{org}/assignments", response_model=list[Assignment])
-async def list_team_assignments(org: str):
+async def list_team_assignments(org: str, me: dict = Depends(current_user)):
+    require_org(org, me)
     docs = (
         await db.assignments.find({"org": org}, {"_id": 0}).sort("created_at", -1).to_list(200)
     )
@@ -215,7 +225,11 @@ async def list_team_assignments(org: str):
 
 
 @router.delete("/assignments/{assignment_id}")
-async def delete_assignment(assignment_id: str):
+async def delete_assignment(assignment_id: str, me: dict = Depends(current_user)):
+    doc = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    require_org(doc.get("org", ""), me)
     res = await db.assignments.delete_one({"id": assignment_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Assignment not found")

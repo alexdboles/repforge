@@ -1,0 +1,66 @@
+{
+  "iteration": 2,
+  "mode": "retest",
+  "passed": 11,
+  "failed": 0,
+  "flaky": 1,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "FIXED: End Simulation is a hard stop even mid-generation (bug from iteration 1) - API repro",
+      "name": "test_tscheck_end_simulation_hard_stop.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "New pytest file: start sim -> POST /turns, 0.5s later fire two concurrent POST /complete. Result: complete statuses sorted == [200, 409]; winner body status=='completed'; the in-flight /turns call returned 409; final GET /simulations/{id} transcript has exactly 1 rep line (the one sent) and exactly 1 prospect line (only the sim-start opener at at=0.0) -- the prospect's reply to the in-flight turn never landed. 1 passed."
+    },
+    {
+      "criterion": "FIXED in the browser: ending mid-turn reaches the scorecard and freezes the transcript",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "flaky",
+      "evidence": "First run: typed reply -> immediate double end-simulation-button click -> grading-overlay shown, but complete() hit a genuine LLM-provider 502 (Coaching analysis failed) unrelated to the ordering fix; backend rolled status back to 'active' per code (routers/simulations.py:265-270) and the check's 60s wait for /scorecard/ timed out on that single attempt. Rerun immediately after (same script, no code change): turns call returned 409, complete returned 200, reached /scorecard/<id>, scorecard shows 'Cold Call ... 2 turns' with no polluting prospect line after the click. Classified flaky per the failure-loop rule (passed clean on rerun; failure was an upstream LLM 502, not the reported bug)."
+    },
+    {
+      "criterion": "Regression: turn failure does not duplicate the rep's line",
+      "name": "test_tscheck_end_simulation_hard_stop.py (covers duplication via rep_lines count==1) / existing negative-states + hidden-intel suites",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "test_tscheck_end_simulation_hard_stop.py asserts len(rep_lines)==1 after the race; test_tscheck_hidden_intel_not_exposed.py drives a full turn + complete and quotes the rep's exact sent text via the scenario reveal check. Both pass under pytest -q: 9 passed overall (see backend suite run below)."
+    },
+    {
+      "criterion": "Regression: guest sign-in, email signup/login and the demo path still pass",
+      "name": "guest-signin-no-loop / email-signup-login-persist / session-survives-without-cookies / demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "All 4 persisted checks re-run by name only: guest-signin-no-loop passed (dashboard after guest, localStorage token survives reload/nav); email-signup-login-persist passed (signup->dashboard, logout->auth-panel, re-login->dashboard, wrong password stays on auth-panel with error toast); session-survives-without-cookies passed (dashboard visible after clearCookies+reload); demo-launch-reaches-simulation passed (demo-launch-button -> /simulation/<id>, transcript-live visible, Jordan Miller opener shown). Only console noise was expected 401s from anonymous /auth/me probes."
+    },
+    {
+      "criterion": "Action item from iteration 1: repair the two broken pre-existing backend test files",
+      "name": "test_tscheck_negative_states.py + test_tscheck_hidden_intel_not_exposed.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Root cause: signup_user() in conftest.py returns an already-open httpx.Client, but each test body additionally wrapped it in `with c:` which tries to __enter__ an already-OPENED client -> RuntimeError('Cannot open a client instance more than once.'). Fix: removed the redundant `with c:` blocks (dedented bodies); the fixture's own c.close() remains the sole lifecycle owner. Re-run: test_complete_with_no_rep_turns_returns_422, test_start_with_unknown_exercise_id_returns_404, test_start_with_invalid_difficulty_returns_422, test_hidden_intel_hidden_while_active_then_revealed_after_complete all pass. Full suite: `python -m pytest -q tests/` -> 9 passed in 24.95s (includes the previously-passing cross-user-idor and unauthenticated-access suites plus the new hard-stop test)."
+    },
+    {
+      "criterion": "Regression: pre-existing voice cast criterion (unchanged, retained from iteration 1)",
+      "name": "voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "/voice-cast shows all 8 named characters loaded; Play preview -> POST /api/voice/speak 200 audio/*."
+    },
+    {
+      "criterion": "Regression: pre-existing training library roadmap cards (unchanged, retained from iteration 1)",
+      "name": "training-library-coming-soon-cards",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "/training shows coming-soon-zoom-calls, coming-soon-screen-share-demo, coming-soon-multi-stakeholder all visible."
+    }
+  ],
+  "bugs": [],
+  "action_items": [
+    {
+      "item": "The evaluate_conversation LLM call occasionally returns a genuine upstream 502 ('Coaching analysis failed. Please try ending the call again.'), observed once during this iteration's browser retest. Backend correctly rolls the simulation status back to 'active' on this failure (routers/simulations.py:265-270), but the frontend grading-overlay does not surface this error state or offer a retry action to the user within the observed run — it simply keeps polling until the caller's own timeout. Not a regression of the hard-stop fix (confirmed passing on immediate rerun); worth a UX pass on the grading-overlay's error/retry path for LLM 502s.",
+      "severity": "low"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 // and speech synthesis for the AI prospect's voice. Degrades to typed input when
 // the browser has no recognition engine.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authHeaders } from "@/lib/api";
 
 interface SpeechResultAlt {
   transcript: string;
@@ -56,6 +57,16 @@ export function useMic(onUtterance: (text: string) => void) {
     recRef.current?.stop();
   }, []);
 
+  /** Hard stop for ending a session: abort() discards any pending final result
+   * so nothing reaches the transcript after the call is over. */
+  const abort = useCallback(() => {
+    wantRef.current = false;
+    setListening(false);
+    setInterim("");
+    recRef.current?.abort();
+    recRef.current = null;
+  }, []);
+
   const start = useCallback(() => {
     const Ctor = getCtor();
     if (!Ctor) {
@@ -73,7 +84,7 @@ export function useMic(onUtterance: (text: string) => void) {
         const r = e.results[i];
         const text = r[0].transcript.trim();
         if (r.isFinal) {
-          if (text) cbRef.current(text);
+          if (text && wantRef.current) cbRef.current(text);
         } else {
           live += text;
         }
@@ -111,29 +122,43 @@ export function useMic(onUtterance: (text: string) => void) {
 
   useEffect(() => () => recRef.current?.abort(), []);
 
-  return { listening, interim, error, start, stop, supported: speechSupported() };
+  return { listening, interim, error, start, stop, abort, supported: speechSupported() };
 }
 
 export type VoicePhase = "idle" | "loading" | "speaking";
 
-/** Prospect voice: ElevenLabs audio from our own backend when a credential is
- * configured, otherwise the browser's speech synthesis. The API key never
- * reaches the client — we only ever POST text to /api/voice/speak. */
-export function useProspectVoice(persona = "default", difficulty = 2) {
+/** Prospect voice: the approved ElevenLabs voice for this character, produced by
+ * our own backend (the API key never reaches the client — we only POST text to
+ * /api/voice/speak).
+ *
+ * There is deliberately NO browser-speech fallback: a recurring buyer must always
+ * sound like the same person, so a voice failure surfaces as a visible error with
+ * a retry instead of silently degrading to a robotic system voice. */
+export function useProspectVoice(character = "", persona = "default", difficulty = 2) {
   const [speaking, setSpeaking] = useState(false);
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [usingElevenLabs, setUsingElevenLabs] = useState(false);
   const [voiceChecked, setVoiceChecked] = useState(false);
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
+  // Every speak() call takes a generation token. silence() bumps the counter, so
+  // any in-flight TTS fetch or queued playback from an older generation is dropped
+  // instead of starting to talk after the call has ended.
+  const genRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastRef = useRef<{ text: string; onDone?: () => void } | null>(null);
+  const characterRef = useRef(character);
   const personaRef = useRef(persona);
   const difficultyRef = useRef(difficulty);
+  characterRef.current = character;
   personaRef.current = persona;
   difficultyRef.current = difficulty;
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/voice/status")
+    fetch("/api/voice/status", { credentials: "include", headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { available?: boolean } | null) => {
         if (!alive) return;
@@ -157,45 +182,25 @@ export function useProspectVoice(persona = "default", difficulty = 2) {
     }
   }, []);
 
-  const speakBrowser = useCallback((text: string, onDone?: () => void) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      onDone?.();
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1.02;
-    u.pitch = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /en-US|en-GB/.test(v.lang) && !/google/i.test(v.name));
-    if (preferred) u.voice = preferred;
-    u.onstart = () => {
-      setSpeaking(true);
-      setPhase("speaking");
-    };
-    const done = () => {
-      setSpeaking(false);
-      setPhase("idle");
-      onDone?.();
-    };
-    u.onend = done;
-    u.onerror = done;
-    window.speechSynthesis.speak(u);
-  }, []);
-
   const speak = useCallback(
     (text: string, onDone?: () => void) => {
       cleanupAudio();
-      if (!usingElevenLabs) {
-        speakBrowser(text, onDone);
-        return;
-      }
+      abortRef.current?.abort();
+      lastRef.current = { text, onDone };
+      const gen = genRef.current + 1;
+      genRef.current = gen;
+      setError(null);
       setPhase("loading");
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
       fetch("/api/voice/speak", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           text,
+          character: characterRef.current,
           persona: personaRef.current,
           difficulty: difficultyRef.current,
         }),
@@ -203,33 +208,53 @@ export function useProspectVoice(persona = "default", difficulty = 2) {
         .then(async (res) => {
           if (!res.ok) throw new Error(`tts ${res.status}`);
           const blob = await res.blob();
+          if (gen !== genRef.current) return; // session ended while audio was loading
           const url = URL.createObjectURL(blob);
           urlRef.current = url;
           const audio = new Audio(url);
           audioRef.current = audio;
           audio.onplay = () => {
+            if (gen !== genRef.current) {
+              audio.pause();
+              return;
+            }
             setSpeaking(true);
+            setVoiceReady(true);
             setPhase("speaking");
           };
           const finish = () => {
             setSpeaking(false);
             setPhase("idle");
             cleanupAudio();
+            if (gen !== genRef.current) return;
             onDone?.();
           };
           audio.onended = finish;
           audio.onerror = finish;
           await audio.play();
         })
-        .catch(() => {
-          // Any ElevenLabs failure degrades to the browser voice, never silence.
-          speakBrowser(text, onDone);
+        .catch((err: unknown) => {
+          if (gen !== genRef.current) return;
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setSpeaking(false);
+          setPhase("idle");
+          setError(
+            `${characterRef.current || "The prospect"}'s voice could not be loaded. No generic voice is substituted — retry to hear them.`,
+          );
         });
     },
-    [usingElevenLabs, speakBrowser, cleanupAudio],
+    [cleanupAudio],
   );
 
+  const retry = useCallback(() => {
+    const last = lastRef.current;
+    if (last) speak(last.text, last.onDone);
+  }, [speak]);
+
   const silence = useCallback(() => {
+    genRef.current += 1; // invalidate every in-flight and queued utterance
+    abortRef.current?.abort();
+    abortRef.current = null;
     window.speechSynthesis?.cancel();
     cleanupAudio();
     setSpeaking(false);
@@ -244,5 +269,15 @@ export function useProspectVoice(persona = "default", difficulty = 2) {
     [cleanupAudio],
   );
 
-  return { speak, silence, speaking, phase, usingElevenLabs, voiceChecked };
+  return {
+    speak,
+    silence,
+    retry,
+    speaking,
+    phase,
+    error,
+    voiceReady,
+    usingElevenLabs,
+    voiceChecked,
+  };
 }

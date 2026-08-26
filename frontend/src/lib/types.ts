@@ -469,3 +469,22 @@ export interface TeamView {
   leaderboard: TeamMember[];
   manager_hours_saved: number;
 }
+
+// Mirrors backend/routers/voice.py :: CastVoice
+export interface CastVoice {
+  character: string;
+  role: string;
+  voice_label: string;
+  style_note: string;
+  stability: number;
+  similarity_boost: number;
+  speed: number;
+  verified: boolean;
+  detail: string;
+}
+
+// Mirrors backend/models/schemas.py :: SessionResponse
+export interface SessionResponse {
+  user: UserProfile;
+  token: string;
+}

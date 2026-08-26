@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, GraduationCap, Lock, Shuffle, Target, User, Building2, Info, Loader2 } from "lucide-react";
+import { ArrowRight, GraduationCap, Lock, Shuffle, Target, User, Building2, Info, Loader2, Video, PresentationIcon, Users2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getUserId } from "@/lib/profile";
@@ -19,8 +19,31 @@ import Journeys from "@/components/Journeys";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export default function Training() {
-  const userId = getUserId();
+const COMING_SOON = [
+  {
+    id: "zoom-calls",
+    name: "Zoom video calls",
+    icon: Video,
+    blurb:
+      "Run the simulation on camera: the prospect appears on video, and you get scored on eye contact, presence and the pauses you leave.",
+  },
+  {
+    id: "screen-share-demo",
+    name: "Screen-share demos",
+    icon: PresentationIcon,
+    blurb:
+      "Share a live deck or product screen while the prospect interrupts with questions — graded on narration and handling derailments.",
+  },
+  {
+    id: "multi-stakeholder",
+    name: "Multi-stakeholder calls",
+    icon: Users2,
+    blurb:
+      "Two or three AI buyers on one call — an economic buyer, a champion and a skeptic — so you practise managing the room.",
+  },
+];
+
+export default function Training() {  const userId = getUserId();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [exerciseId, setExerciseId] = useState(params.get("exercise") ?? "cold-call");
@@ -126,8 +149,38 @@ export default function Training() {
           </div>
         </section>
 
-        <h2 className="mt-10 font-heading text-[19px] font-extrabold">Skill library</h2>
-        <p className="mt-1 text-[13.5px] text-muted-foreground">
+        <section className="mt-10" data-testid="coming-soon-section">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-[19px] font-extrabold">On the roadmap</h2>
+              <p className="mt-1 max-w-2xl text-[13.5px] text-muted-foreground">
+                The same evaluation engine, extended to the channels modern sellers actually work in.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {COMING_SOON.map((c) => (
+              <div
+                key={c.id}
+                data-testid={`coming-soon-${c.id}`}
+                className="rounded-lg border border-dashed border-border bg-secondary/40 p-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="flex items-center gap-2 font-heading text-[15px] font-bold">
+                    <c.icon className="size-4 text-muted-foreground" />
+                    {c.name}
+                  </span>
+                  <span className="rounded-full bg-[#0F172A] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
+                    Coming soon
+                  </span>
+                </div>
+                <p className="mt-2 text-[12.5px] leading-snug text-muted-foreground">{c.blurb}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <h2 className="mt-10 font-heading text-[19px] font-extrabold">Skill library</h2>        <p className="mt-1 text-[13.5px] text-muted-foreground">
           Follow the recommended order — each stage builds on the one before it.
         </p>
 

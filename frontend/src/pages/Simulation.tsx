@@ -55,16 +55,24 @@ export default function SimulationPage() {
   const [showExample, setShowExample] = useState(false);
   // Hard session boundary: once true, nothing may reach the transcript or the voice layer.
   const [ended, setEnded] = useState(false);
+  // Ref mirror of `ended` — callbacks captured before the click (mutation
+  // handlers, mic results, TTS completion) read the ref, never a stale closure.
+  const endedRef = useRef(false);
   const [failedLine, setFailedLine] = useState<string | null>(null);
+  const [gradeError, setGradeError] = useState<string | null>(null);
   const openedRef = useRef(false);
-  const voice = useProspectVoice(sim?.voice_persona ?? "default", sim?.difficulty ?? 2);
+  const voice = useProspectVoice(
+    sim?.scenario?.prospect_name ?? "",
+    sim?.voice_persona ?? "default",
+    sim?.difficulty ?? 2,
+  );
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const turnMutation = useMutation({
     mutationFn: (text: string) =>
       apiPost<TurnResponse>(`/simulations/${id}/turns`, { text, at: seconds }),
     onSuccess: (res, text) => {
-      if (ended) return; // late reply after End Simulation — discard entirely
+      if (endedRef.current) return; // late reply after End Simulation — discard entirely
       setPendingRep(null);
       setTurnError(null);
       setFailedLine(null);
@@ -78,6 +86,7 @@ export default function SimulationPage() {
     },
     onError: (err, text) => {
       setPendingRep(null);
+      if (endedRef.current) return;
       setFailedLine(text);
       const detail =
         err instanceof ApiError && typeof (err.body as { detail?: string })?.detail === "string"
@@ -92,7 +101,7 @@ export default function SimulationPage() {
   const send = useCallback(
     (text: string) => {
       const clean = text.trim();
-      if (!clean || turnMutation.isPending || ended) return;
+      if (!clean || turnMutation.isPending || endedRef.current) return;
       setPendingRep(clean);
       setTurnError(null);
       turnMutation.mutate(clean);
@@ -107,10 +116,10 @@ export default function SimulationPage() {
     if (!pendingSpeak) return;
     const line = pendingSpeak;
     setPendingSpeak(null);
-    if (muted || ended) return;
+    if (muted || endedRef.current) return;
     mic.stop();
     voice.speak(line, () => {
-      if (micWanted.current) mic.start();
+      if (micWanted.current && !endedRef.current) mic.start();
     });
   }, [pendingSpeak, muted, mic, voice]);
 
@@ -130,6 +139,7 @@ export default function SimulationPage() {
   const complete = useMutation({
     mutationFn: () => apiPost<Simulation>(`/simulations/${id}/complete`),
     onSuccess: () => {
+      setGradeError(null);
       qc.invalidateQueries({ queryKey: ["dashboard", userId] });
       qc.invalidateQueries({ queryKey: ["history", userId] });
       qc.invalidateQueries({ queryKey: ["user", userId] });
@@ -137,10 +147,13 @@ export default function SimulationPage() {
       navigate(`/scorecard/${id}`);
     },
     onError: (err) => {
+      // Grading failed — keep the call frozen but show a retry instead of a
+      // spinner that never resolves.
       const detail =
         err instanceof ApiError && typeof (err.body as { detail?: string })?.detail === "string"
           ? (err.body as { detail: string }).detail
           : "Could not grade the call. Please try again.";
+      setGradeError(detail);
       toast.error(detail);
     },
   });
@@ -163,7 +176,7 @@ export default function SimulationPage() {
 
   // speak the prospect's opening line once
   useEffect(() => {
-    if (!sim || openedRef.current || muted) return;
+    if (!sim || openedRef.current || muted || endedRef.current) return;
     const opening = sim.transcript.find((t) => t.speaker === "prospect");
     if (!opening) return;
     openedRef.current = true;
@@ -217,6 +230,9 @@ export default function SimulationPage() {
   const scenario = sim?.scenario;
   const speaking = voice.speaking;
   const thinking = turnMutation.isPending || voice.phase === "loading";
+  // Only an in-flight turn blocks sending. Voice loading must never disable the
+  // reply controls — the rep would silently lose the line they just typed.
+  const sending = turnMutation.isPending;
 
   const phase = thinking
     ? {
@@ -280,10 +296,12 @@ export default function SimulationPage() {
           ) : null}
           <span className="text-[11px] text-slate-500" data-testid="voice-provider">
             {!voice.voiceChecked
-              ? "Checking voice…"
-              : voice.usingElevenLabs
-                ? "ElevenLabs voice"
-                : "Browser voice"}
+              ? "Preparing voice…"
+              : voice.error
+                ? "Voice failed"
+                : voice.usingElevenLabs
+                  ? `ElevenLabs voice · ${sim?.scenario?.prospect_name?.split(" ")[0] ?? "prospect"}`
+                  : "Voice unavailable"}
           </span>
           <span
             className="ml-auto font-mono text-[16px] tabular-nums text-slate-200"
@@ -405,6 +423,23 @@ export default function SimulationPage() {
             </div>
 
             <div className="border-t border-[#1E293B] px-5 py-4">
+              {voice.error ? (
+                <div
+                  className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-[12.5px] text-red-200"
+                  data-testid="voice-error"
+                >
+                  <span className="min-w-0 flex-1">{voice.error}</span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => voice.retry()}
+                    data-testid="voice-retry-button"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Retry voice
+                  </Button>
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   size="lg"
@@ -441,9 +476,10 @@ export default function SimulationPage() {
                   className="ml-auto font-semibold"
                   onClick={() => {
                     // Terminate the live session first, then analyse the frozen transcript.
+                    endedRef.current = true;
                     setEnded(true);
                     micWanted.current = false;
-                    mic.stop();
+                    mic.abort();
                     voice.silence();
                     turnMutation.reset();
                     setPendingRep(null);
@@ -489,7 +525,7 @@ export default function SimulationPage() {
                 <Button
                   type="submit"
                   variant="secondary"
-                  disabled={!typed.trim() || thinking}
+                  disabled={!typed.trim() || sending}
                   data-testid="send-typed-reply-button"
                 >
                   <Send className="size-4" />
@@ -508,7 +544,7 @@ export default function SimulationPage() {
                     size="sm"
                     variant="secondary"
                     onClick={() => failedLine && send(failedLine)}
-                    disabled={thinking || !failedLine}
+                    disabled={sending || !failedLine}
                     data-testid="retry-turn-button"
                   >
                     <RotateCcw className="size-3.5" />
@@ -599,6 +635,36 @@ export default function SimulationPage() {
           className="fixed inset-0 z-50 grid place-items-center bg-[#090D16]/90 backdrop-blur-sm"
           data-testid="grading-overlay"
         >
+          {gradeError ? (
+            <div className="max-w-md text-center" data-testid="grading-error">
+              <h2 className="font-heading text-[20px] font-bold">Call ended — grading failed</h2>
+              <p className="mt-2 text-[13.5px] text-slate-300">
+                {gradeError} Your conversation is saved, so nothing is lost.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <Button
+                  onClick={() => {
+                    setGradeError(null);
+                    complete.mutate();
+                  }}
+                  disabled={complete.isPending}
+                  data-testid="grading-retry-button"
+                  className="font-semibold"
+                >
+                  <RotateCcw className="size-4" />
+                  Try grading again
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/training")}
+                  data-testid="grading-exit-button"
+                  className="border-slate-700 bg-transparent font-semibold text-slate-200 hover:bg-slate-800"
+                >
+                  Back to training
+                </Button>
+              </div>
+            </div>
+          ) : (
           <div className="text-center">
             <Loader2 className="mx-auto size-7 animate-spin text-sky-400" />
             <h2 className="mt-4 font-heading text-[20px] font-bold">Simulation complete</h2>
@@ -611,6 +677,7 @@ export default function SimulationPage() {
               <li>· Building your scorecard</li>
             </ul>
           </div>
+          )}
         </div>
       ) : null}
     </div>

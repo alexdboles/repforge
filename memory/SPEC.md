@@ -2,8 +2,8 @@
 
 ## What it does
 A "sales flight simulator". A rep picks an exercise + difficulty, reads a pre-call brief,
-holds a live voice conversation with an AI prospect (Claude Sonnet 4.5 via the Emergent
-universal key), ends the call, and receives an AI scorecard with competency scores,
+holds a live voice conversation with an AI prospect (OpenAI `gpt-5.4` when `OPENAI_API_KEY` is set,
+otherwise Claude Sonnet 4.5 via the Emergent universal key), ends the call, and receives an AI scorecard with competency scores,
 quoted strengths/misses, coaching priorities, communication analytics and a tagged
 transcript. Progress, XP/levels/badges/streaks and history are persisted in MongoDB.
 
@@ -14,13 +14,23 @@ prospect's voice). A typed-reply input is always available as a fallback for bro
 without speech recognition (including headless Chromium in tests).
 
 ## Auth
-No passwords. `POST /api/users` creates a profile; the id is stored in localStorage under
-`vocalpitch.user_id`. Landing page creates the profile ("Demo Rep" if no name given).
+Email + password accounts with bcrypt hashing and a signed JWT in an **httpOnly, Secure,
+SameSite=Lax** cookie (`repforge_session`, 14 days). A "Continue as guest" button creates a
+throwaway account for first-time visitors/judges. Routes: `POST /api/auth/signup`,
+`/auth/login`, `/auth/guest`, `/auth/logout`, `GET /auth/me`. `POST /api/users` no longer
+exists. The browser also caches the non-sensitive user id in localStorage
+(`vocalpitch.user_id`) for UI state; identity on the server always comes from the cookie.
+
+Authorization: every user-owned route derives the caller from the cookie and enforces
+ownership (`require_self` / `require_owned` / `require_org` in `backend/lib/auth.py`). A
+`user_id` in a request body is ignored. Foreign simulation ids return 404. Expensive
+endpoints (TTS, turns, starts, hints, scenario generation, login) are rate limited per
+user/IP, max 3 concurrent live simulations. Details in `memory/SECURITY.md`.
 
 ## Data model (Mongo)
 - `users`: id, name, role, experience_level, org, xp, level, streak, last_practice_date, badges, created_at
 - `simulations`: id, user_id, exercise_id/name, difficulty/name, scenario (full incl. hidden),
-  status (active|completed), transcript[{speaker,text,at}], started_at, ended_at,
+  status (active|analyzing|completed), transcript[{speaker,text,at}], started_at, ended_at,
   duration_seconds, evaluation, xp_awarded
 - Static catalog in `backend/lib/catalog.py`: 8 exercises, 5 difficulties, 5 scenarios
   (each with `known` public intel and `hidden` intel the rep must discover), 14 skill
@@ -28,7 +38,8 @@ No passwords. `POST /api/users` creates a profile; the id is stored in localStor
 
 ## Key API routes (all under /api)
 - GET `/exercises`, `/difficulties`, `/skills`, `/exercises/{id}/scenarios`
-- POST `/users`, GET/PATCH `/users/{id}`, GET `/users/{id}/dashboard`, GET `/users/{id}/simulations`
+- POST `/auth/signup|login|guest|logout`, GET `/auth/me`
+- GET/PATCH `/users/{id}`, GET `/users/{id}/dashboard`, GET `/users/{id}/simulations`
 - POST `/simulations` (starts a call; returns prospect's opening line)
 - POST `/simulations/{id}/turns` {text, at} → prospect reply
 - POST `/simulations/{id}/complete` → runs the coaching evaluation, awards XP
@@ -163,3 +174,33 @@ Cockpit shows four explicit states: Your turn / Listening / Prospect thinking / 
   and the biggest opportunity.
 - **Voice realism**: switched to `eleven_multilingual_v2` with per-difficulty stability/style curves
   and light punctuation shaping for breaths.
+
+## Session lifecycle (privacy boundary)
+`End simulation` aborts speech recognition (discarding pending finals), invalidates any
+in-flight ElevenLabs TTS request and queued playback via a generation token, cancels
+speech synthesis and freezes the transcript; late turn responses are discarded. The
+backend claims the row atomically (`active → analyzing`) so double-clicks cannot
+double-analyse or double-award XP.
+
+## Demo path
+`Try a 2-minute demo call` on the dashboard (`demo-launch-button`) starts a pre-configured
+Cold Call vs Jordan Miller (scenario `crm-vp-sales`, Level 2) with no setup and jumps
+straight into the voice cockpit.
+
+## Roadmap placeholders
+Training library shows non-clickable "Coming soon" cards for Zoom video calls,
+screen-share demos and multi-stakeholder calls.
+
+## Voice layer (fixed cast)
+`backend/lib/voicecast.py` maps each recurring buyer to one permanent ElevenLabs
+voice with per-character settings (stability / similarity / speed): Marcus Webb→Chris,
+Sarah Lindqvist→Bella, David Okonjo→Eric, Jordan Miller→Adam, Alicia Reyes→Matilda,
+Daniel Okafor→Brian, Priya Raghavan→Jessica, plus a dedicated coach voice (REP COACH→Alice)
+that is never used for a buyer. AI-generated prospects fall back to a deterministic
+persona→character voice. Difficulty only trims stability slightly — behaviour, not pitch,
+makes a buyer hard. Model: `eleven_multilingual_v2`.
+
+There is **no browser-speech fallback** in the prospect path: `useProspectVoice` surfaces
+`voice-error` with a `voice-retry-button` if the approved voice fails. `GET /api/voice/cast`
+verifies every voice id against ElevenLabs and powers the QA page at `/voice-cast`.
+Prospect prompts include SPOKEN_RULES (1-3 sentences, contractions, no chatbot prose).
