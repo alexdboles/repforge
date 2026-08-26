@@ -2,9 +2,11 @@
 from fastapi import APIRouter, HTTPException
 
 from lib.analytics import build_skills, build_exercise_stats
-from lib.catalog import exercise_by_id
+from lib.catalog import difficulty_by_level, exercise_by_id
 from lib.db import db
 from models.schemas import (
+    Assignment,
+    AssignmentCreate,
     Attempt,
     AttemptSeries,
     SkillStat,
@@ -131,6 +133,21 @@ async def team_view(org: str):
         )
 
     gaps = [SkillStat(**s) for s in build_skills(all_sims)][::-1][:6]
+    assignments = (
+        await db.assignments.find({"org": org}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    )
+    from datetime import date
+
+    lapsed: list[str] = []
+    for m in members:
+        if not m.last_practice_date:
+            lapsed.append(m.name)
+            continue
+        try:
+            if (date.today() - date.fromisoformat(m.last_practice_date)).days >= 3:
+                lapsed.append(m.name)
+        except ValueError:
+            pass
     return TeamView(
         org=org,
         members=sorted(members, key=lambda m: -m.reps),
@@ -145,4 +162,61 @@ async def team_view(org: str):
             key=lambda m: -(m.average_score or 0),
         )[:10],
         manager_hours_saved=round(len(all_sims) * MANAGER_MINUTES_PER_ROLEPLAY / 60, 1),
+        assignments=[Assignment(**a) for a in assignments],
+        lapsed_members=lapsed,
     )
+
+
+# ---------------- assigned training ----------------
+
+
+@router.post("/assignments", response_model=Assignment)
+async def create_assignment(payload: AssignmentCreate):
+    user = await db.users.find_one({"id": payload.user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Rep not found")
+    exercise = exercise_by_id(payload.exercise_id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Unknown exercise")
+    difficulty = difficulty_by_level(payload.difficulty)
+    if not difficulty:
+        raise HTTPException(status_code=422, detail="Difficulty must be 1-5")
+    assignment = Assignment(
+        user_id=payload.user_id,
+        user_name=user["name"],
+        org=payload.org or user.get("org", ""),
+        exercise_id=exercise["id"],
+        exercise_name=exercise["name"],
+        difficulty=difficulty["level"],
+        difficulty_name=difficulty["name"],
+        note=payload.note,
+        assigned_by=payload.assigned_by,
+    )
+    await db.assignments.insert_one(assignment.model_dump())
+    return assignment
+
+
+@router.get("/users/{user_id}/assignments", response_model=list[Assignment])
+async def list_user_assignments(user_id: str):
+    docs = (
+        await db.assignments.find({"user_id": user_id}, {"_id": 0})
+        .sort("created_at", -1)
+        .to_list(100)
+    )
+    return [Assignment(**d) for d in docs]
+
+
+@router.get("/teams/{org}/assignments", response_model=list[Assignment])
+async def list_team_assignments(org: str):
+    docs = (
+        await db.assignments.find({"org": org}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    )
+    return [Assignment(**d) for d in docs]
+
+
+@router.delete("/assignments/{assignment_id}")
+async def delete_assignment(assignment_id: str):
+    res = await db.assignments.delete_one({"id": assignment_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"deleted": True}

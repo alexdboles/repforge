@@ -208,7 +208,27 @@ async def complete_simulation(sim_id: str):
     }
     await db.simulations.update_one({"id": sim_id}, {"$set": updates})
     await _award(sim["user_id"], xp)
+    await _close_assignment(sim, evaluation.overall_score, ended)
     return Simulation(**_shield({**sim, **updates}))
+
+
+async def _close_assignment(sim: dict, score: int, ended: datetime) -> None:
+    """A completed call satisfies the oldest matching pending assignment."""
+    await db.assignments.update_one(
+        {
+            "user_id": sim["user_id"],
+            "exercise_id": sim["exercise_id"],
+            "status": "pending",
+        },
+        {
+            "$set": {
+                "status": "completed",
+                "completed_at": ended,
+                "completed_simulation_id": sim["id"],
+                "score": score,
+            }
+        },
+    )
 
 
 async def _award(user_id: str, xp: int) -> None:
@@ -236,6 +256,40 @@ async def _award(user_id: str, xp: int) -> None:
             }
         },
     )
+
+
+@router.post("/simulations/{sim_id}/retry", response_model=Simulation)
+async def retry_simulation(sim_id: str):
+    """Re-run the exact same prospect and difficulty, so attempts are comparable."""
+    old = await _load(sim_id)
+    exercise = exercise_by_id(old["exercise_id"])
+    difficulty = difficulty_by_level(old["difficulty"])
+    if not exercise or not difficulty:
+        raise HTTPException(status_code=422, detail="This simulation cannot be retried")
+
+    sim = Simulation(
+        user_id=old["user_id"],
+        exercise_id=old["exercise_id"],
+        exercise_name=old["exercise_name"],
+        difficulty=old["difficulty"],
+        difficulty_name=old["difficulty_name"],
+        scenario=old["scenario"],
+        mode=old.get("mode", "guided"),
+        voice_persona=old.get("voice_persona") or voice_persona_for(old["scenario"]),
+    )
+    try:
+        opening = await prospect_opening(sim.id, old["scenario"], exercise, difficulty)
+        sim.transcript = [TranscriptTurn(speaker="prospect", text=opening, at=0.0)]
+    except LlmUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("retry opening failed")
+        raise HTTPException(
+            status_code=502, detail=f"AI prospect could not be reached: {exc}"
+        ) from exc
+
+    await db.simulations.insert_one(sim.model_dump())
+    return Simulation(**_shield(sim.model_dump()))
 
 
 @router.get("/simulations/{sim_id}", response_model=Simulation)

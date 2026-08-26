@@ -115,3 +115,24 @@ Cockpit shows four explicit states: Your turn / Listening / Prospect thinking / 
   `missing_permissions: text_to_speech` — the supplied key lacks the Text-to-Speech scope.
   The frontend degrades to browser speech synthesis automatically, so voice never breaks.
   Fix by enabling Text to Speech on the key (ElevenLabs → Profile → API Keys → edit scopes).
+
+---
+
+# V4 — ElevenLabs live, assigned training, streak nudges, same-prospect retry
+
+- **ElevenLabs is ACTIVE.** `ELEVENLABS_API_KEY` in backend/.env now has the Text-to-Speech scope;
+  `POST /api/voice/speak` returns audio/mpeg. Frontend labels it "ElevenLabs voice" in the cockpit
+  and still auto-degrades to browser speech synthesis on any failure.
+- **Assigned training** (`assignments` collection): `POST /api/assignments`
+  {user_id, exercise_id, difficulty, note, assigned_by, org}; `GET /api/users/{id}/assignments`;
+  `GET /api/teams/{org}/assignments`; `DELETE /api/assignments/{id}`. Completing a simulation for
+  that exercise auto-closes the oldest matching pending assignment and records the score.
+  Manager UI: Assign button per rep on `/team` + an "Assigned training" tracker. Rep UI:
+  "Assigned to you" card on the dashboard with a Start link into the guided module.
+- **Streak nudges**: `Dashboard.nudge` = {level: fresh|due|lapsed|never, days_since, headline, detail}
+  computed from `last_practice_date`. Rendered as a dashboard banner with a "Practise now" CTA.
+  `TeamView.lapsed_members` lists reps idle 3+ days and drives an amber banner on `/team`.
+  In-app only — no email/SMS.
+- **Same-prospect retry**: `POST /api/simulations/{id}/retry` clones the scenario, difficulty and mode
+  (and voice persona) into a fresh simulation with a new opening line, so attempt comparison is
+  apples to apples. Scorecard button: "Run this exact prospect again"; "New scenario" is separate.

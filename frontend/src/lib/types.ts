@@ -303,8 +303,35 @@ export interface BadgeItem {
   earned: boolean;
 }
 
+export interface Nudge {
+  level: "fresh" | "due" | "lapsed" | "never";
+  days_since: number | null;
+  headline: string;
+  detail: string;
+}
+
+export interface Assignment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  org: string;
+  exercise_id: string;
+  exercise_name: string;
+  difficulty: number;
+  difficulty_name: string;
+  note: string;
+  assigned_by: string;
+  status: "pending" | "completed";
+  created_at: string;
+  completed_at: string | null;
+  completed_simulation_id: string | null;
+  score: number | null;
+}
+
 export interface Dashboard {
   user: UserProfile;
+  nudge: Nudge;
+  assignments: Assignment[];
   completed: number;
   average_score: number;
   recent_score: number | null;
@@ -367,6 +394,8 @@ export interface TeamMember {
 
 export interface TeamView {
   org: string;
+  assignments: Assignment[];
+  lapsed_members: string[];
   members: TeamMember[];
   total_reps: number;
   total_practice_seconds: number;

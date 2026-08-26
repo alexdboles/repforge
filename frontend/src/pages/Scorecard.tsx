@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -22,7 +22,8 @@ import {
   Target,
   TriangleAlert,
 } from "lucide-react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { toast } from "sonner";
 import { formatDuration, getUserId, tagMeta } from "@/lib/profile";
 import type { Simulation } from "@/lib/types";
 import AppShell from "@/components/AppShell";
@@ -36,7 +37,13 @@ import { cn } from "@/lib/utils";
 export default function Scorecard() {
   const { id = "" } = useParams();
   const userId = getUserId();
+  const navigate = useNavigate();
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const retrySame = useMutation({
+    mutationFn: () => apiPost<Simulation>(`/simulations/${id}/retry`),
+    onSuccess: (next) => navigate(`/simulation/${next.id}`),
+    onError: () => toast.error("Could not restart this prospect. Try again."),
+  });
   const { data: sim, isLoading, isError } = useQuery({
     queryKey: ["simulation", id],
     queryFn: () => apiGet<Simulation>(`/simulations/${id}`),
@@ -124,6 +131,20 @@ export default function Scorecard() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="font-semibold"
+              onClick={() => retrySame.mutate()}
+              disabled={retrySame.isPending}
+              data-testid="scorecard-retry-same-prospect"
+            >
+              {retrySame.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
+              Run this exact prospect again
+            </Button>
             <Link
               to={
                 sim.mode === "business"
@@ -131,10 +152,9 @@ export default function Scorecard() {
                   : `/learn/${sim.exercise_id}?difficulty=${sim.difficulty}`
               }
               data-testid="scorecard-retry"
-              className={cn(buttonVariants({ variant: "outline" }), "font-semibold")}
+              className={cn(buttonVariants({ variant: "ghost" }), "font-semibold")}
             >
-              <RotateCcw className="size-4" />
-              Retry this exercise
+              New scenario
             </Link>
             {evaluation ? (
               <Link

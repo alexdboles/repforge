@@ -58,6 +58,11 @@ async def dashboard(user_id: str):
         .to_list(500)
     )
     data = build_dashboard(user, sims)
+    data["assignments"] = (
+        await db.assignments.find({"user_id": user_id}, {"_id": 0})
+        .sort("created_at", -1)
+        .to_list(20)
+    )
     if set(data["user"]["badges"]) != set(user.get("badges") or []):
         await db.users.update_one(
             {"id": user_id}, {"$set": {"badges": data["user"]["badges"]}}

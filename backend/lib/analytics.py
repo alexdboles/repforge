@@ -145,6 +145,48 @@ def summarize(sim: dict) -> dict[str, Any]:
     }
 
 
+def build_nudge(user: dict, sims: list[dict]) -> dict[str, Any]:
+    """Streak keeper: reps improve by repetition, so surface the gap explicitly."""
+    from datetime import date
+
+    last = user.get("last_practice_date")
+    if not last or not sims:
+        return {
+            "level": "never",
+            "days_since": None,
+            "headline": "Start your first rep",
+            "detail": "One five-minute call is enough to get a baseline score you can improve on.",
+        }
+    try:
+        days = (date.today() - date.fromisoformat(last)).days
+    except ValueError:
+        days = 0
+    streak = user.get("streak", 0)
+    if days <= 1:
+        return {
+            "level": "fresh",
+            "days_since": days,
+            "headline": f"{streak}-day streak alive",
+            "detail": "You practised today. Another rep at a higher difficulty compounds it.",
+        }
+    if days < 3:
+        return {
+            "level": "due",
+            "days_since": days,
+            "headline": f"You're due — {days} days since your last call",
+            "detail": "Run one rep today to keep your streak and hold on to what you learned.",
+        }
+    return {
+        "level": "lapsed",
+        "days_since": days,
+        "headline": f"{days} days without practice",
+        "detail": (
+            "Skills decay faster than most reps expect. One call on your weakest "
+            "category restarts the streak."
+        ),
+    }
+
+
 def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
     """sims: completed simulations, oldest first."""
     scores = _completed_scores(sims)
@@ -185,6 +227,7 @@ def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
         "recent": [summarize(s) for s in reversed(sims)][:6],
         "total_practice_seconds": sum(s.get("duration_seconds", 0) for s in sims),
         "badges": badge_list(earned),
+        "nudge": build_nudge(user, sims),
     }
 
 

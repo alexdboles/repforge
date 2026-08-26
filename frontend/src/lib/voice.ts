@@ -123,6 +123,7 @@ export function useProspectVoice(persona = "default", difficulty = 2) {
   const [speaking, setSpeaking] = useState(false);
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [usingElevenLabs, setUsingElevenLabs] = useState(false);
+  const [voiceChecked, setVoiceChecked] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
   const personaRef = useRef(persona);
@@ -135,9 +136,13 @@ export function useProspectVoice(persona = "default", difficulty = 2) {
     fetch("/api/voice/status")
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { available?: boolean } | null) => {
-        if (alive && d) setUsingElevenLabs(Boolean(d.available));
+        if (!alive) return;
+        if (d) setUsingElevenLabs(Boolean(d.available));
+        setVoiceChecked(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (alive) setVoiceChecked(true);
+      });
     return () => {
       alive = false;
     };
@@ -239,5 +244,5 @@ export function useProspectVoice(persona = "default", difficulty = 2) {
     [cleanupAudio],
   );
 
-  return { speak, silence, speaking, phase, usingElevenLabs };
+  return { speak, silence, speaking, phase, usingElevenLabs, voiceChecked };
 }

@@ -248,7 +248,11 @@ export default function SimulationPage() {
             </span>
           ) : null}
           <span className="text-[11px] text-slate-500" data-testid="voice-provider">
-            {voice.usingElevenLabs ? "ElevenLabs voice" : "Browser voice"}
+            {!voice.voiceChecked
+              ? "Checking voice…"
+              : voice.usingElevenLabs
+                ? "ElevenLabs voice"
+                : "Browser voice"}
           </span>
           <span
             className="ml-auto font-mono text-[16px] tabular-nums text-slate-200"

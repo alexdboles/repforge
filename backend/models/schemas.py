@@ -368,6 +368,42 @@ class ExerciseStat(BaseModel):
     best: int
 
 
+# ---------- assigned training ----------
+class AssignmentCreate(BaseModel):
+    user_id: str
+    exercise_id: str
+    difficulty: int = 2
+    note: str = ""
+    assigned_by: str = "Manager"
+    org: str = ""
+
+
+class Assignment(BaseModel):
+    id: str = Field(default_factory=_uid)
+    user_id: str
+    user_name: str = ""
+    org: str = ""
+    exercise_id: str
+    exercise_name: str = ""
+    difficulty: int = 2
+    difficulty_name: str = ""
+    note: str = ""
+    assigned_by: str = "Manager"
+    status: Literal["pending", "completed"] = "pending"
+    created_at: datetime = Field(default_factory=_now)
+    completed_at: Optional[datetime] = None
+    completed_simulation_id: Optional[str] = None
+    score: Optional[int] = None
+
+
+# ---------- practice nudge ----------
+class Nudge(BaseModel):
+    level: Literal["fresh", "due", "lapsed", "never"] = "never"
+    days_since: Optional[int] = None
+    headline: str
+    detail: str
+
+
 # ---------- team / manager view ----------
 class TeamMember(BaseModel):
     user_id: str
@@ -386,6 +422,8 @@ class TeamMember(BaseModel):
 
 class TeamView(BaseModel):
     org: str
+    assignments: list[Assignment] = []
+    lapsed_members: list[str] = []
     members: list[TeamMember] = []
     total_reps: int = 0
     total_practice_seconds: int = 0
@@ -407,6 +445,8 @@ class Recommendation(BaseModel):
 
 class Dashboard(BaseModel):
     user: UserProfile
+    nudge: Nudge
+    assignments: list[Assignment] = []
     completed: int
     average_score: int
     recent_score: Optional[int] = None

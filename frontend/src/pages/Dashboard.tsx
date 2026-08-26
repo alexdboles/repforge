@@ -9,7 +9,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowRight, ArrowUpRight, Briefcase, GraduationCap, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BellRing,
+  Briefcase,
+  ClipboardCheck,
+  Flame,
+  GraduationCap,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { getUserId, formatDuration, scoreTone } from "@/lib/profile";
 import type { Dashboard as DashboardData } from "@/lib/types";
@@ -54,6 +64,88 @@ export default function Dashboard() {
             <ArrowRight className="size-4" />
           </Link>
         </div>
+
+        {d?.nudge ? (
+          <div
+            className={cn(
+              "mt-6 flex flex-wrap items-center gap-4 rounded-lg border p-4",
+              d.nudge.level === "lapsed"
+                ? "border-amber-300 bg-amber-50"
+                : d.nudge.level === "due"
+                  ? "border-sky-200 bg-sky-50"
+                  : "border-emerald-200 bg-emerald-50",
+            )}
+            data-testid="streak-nudge"
+          >
+            {d.nudge.level === "fresh" ? (
+              <Flame className="size-5 shrink-0 text-orange-600" />
+            ) : (
+              <BellRing className="size-5 shrink-0 text-amber-700" />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="font-heading text-[15px] font-bold" data-testid="nudge-headline">
+                {d.nudge.headline}
+              </div>
+              <p className="text-[13px] text-slate-700">{d.nudge.detail}</p>
+            </div>
+            <Link
+              to={`/learn/${d.recommendation.exercise_id}?difficulty=${d.recommendation.difficulty}`}
+              className={cn(buttonVariants({ size: "sm" }), "font-semibold")}
+              data-testid="nudge-cta"
+            >
+              Practise now
+            </Link>
+          </div>
+        ) : null}
+
+        {d?.assignments?.length ? (
+          <section className="mt-6 rounded-xl border border-border bg-card p-5" data-testid="assigned-training">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck className="size-4 text-primary" />
+              <h2 className="font-heading text-[17px] font-bold">Assigned to you</h2>
+            </div>
+            <div className="mt-3 space-y-2">
+              {d.assignments.slice(0, 4).map((a) => (
+                <div
+                  key={a.id}
+                  className={cn(
+                    "flex flex-wrap items-center gap-3 rounded-lg border p-3.5",
+                    a.status === "completed" ? "border-border bg-secondary/50" : "border-primary/40 bg-accent",
+                  )}
+                  data-testid={`assignment-${a.id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-semibold">
+                      {a.exercise_name} · Level {a.difficulty} {a.difficulty_name}
+                    </div>
+                    <div className="text-[12.5px] text-muted-foreground">
+                      From {a.assigned_by}
+                      {a.note ? ` — ${a.note}` : ""}
+                    </div>
+                  </div>
+                  {a.status === "completed" ? (
+                    <Link
+                      to={`/scorecard/${a.completed_simulation_id}`}
+                      className="flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700"
+                      data-testid={`assignment-done-${a.id}`}
+                    >
+                      Completed · {a.score}
+                    </Link>
+                  ) : (
+                    <Link
+                      to={`/learn/${a.exercise_id}?difficulty=${a.difficulty}`}
+                      className={cn(buttonVariants({ size: "sm" }), "font-semibold")}
+                      data-testid={`assignment-start-${a.id}`}
+                    >
+                      Start
+                      <ArrowRight className="size-3.5" />
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <div className="mt-6 grid gap-4 md:grid-cols-2" data-testid="dashboard-paths">
           <Link
