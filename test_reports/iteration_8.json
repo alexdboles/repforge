@@ -1,0 +1,184 @@
+{
+  "iteration": 8,
+  "mode": "retest",
+  "passed": 24,
+  "failed": 0,
+  "flaky": 1,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Backend test suite: python -m pytest -q in /app/backend passes with no new failures",
+      "name": "pytest -q (21 files)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> '28 passed in 115.22s'. 18 pre-existing files plus 3 new ones added this iteration."
+    },
+    {
+      "criterion": "Live-turn path: routers/simulations.add_turn split into _guard_turn + _prospect_reply — 2-3 typed turns in a row each recorded exactly once + reply, empty utterance 422, turn on completed call 409",
+      "name": "test_tscheck_live_turn_guard.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: 3 sequential POST /simulations/{id}/turns each 200 with a non-empty reply; final transcript has each of the 3 rep lines exactly once and opening+3 prospect replies; blank text -> 422; a turn after /complete -> 409."
+    },
+    {
+      "criterion": "Live-turn path: a turn that lands after End is 409 with its prospect reply absent from the transcript",
+      "name": "test_tscheck_end_simulation_hard_stop.py (re-run)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Re-run in full suite: in-flight /turns call during concurrent /complete returns 409; final transcript has exactly 1 rep line and only the opening prospect line (no reply for the 409'd turn)."
+    },
+    {
+      "criterion": "ElevenLabs proxy after speak() split into _delivery + _synthesize: known character 200 audio/mpeg + headers, anonymous 401, over-cap text 422, unknown character falls back and still succeeds, /voice/cast lists 8 verified voices",
+      "name": "test_tscheck_voice_speak_proxy.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: POST /voice/speak {character:'Jordan Miller',difficulty:3} -> 200 audio/mpeg with X-Voice-Character/X-Voice-Label; no-auth -> 401; 1201-char text -> 422; unknown character name -> 200 audio/mpeg (persona fallback); GET /voice/cast -> 8 entries, all verified:true."
+    },
+    {
+      "criterion": "Scenario generation / dashboard after helper extraction: 'Practice My Business' profile+custom-scenario starts a simulation; GET /users/{me}/dashboard shape matches completed calls",
+      "name": "test_tscheck_scenario_and_dashboard.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: POST /users/{id}/sales-profiles -> 200; POST /custom-scenarios -> 200 with prospect_name/company; POST /simulations with custom_scenario_id -> 200 active, scenario.company matches. Dashboard before any calls: completed==0, full shape present; after 1 completed call: completed==1, average_score/personal_best ~= overall_score, trend has >=1 point, skills/badges present."
+    },
+    {
+      "criterion": "BusinessSetup hook-order fix: objection-suggestion-* chips render/add/remove, /practice-business/setup loads without hooks error, profile saves",
+      "name": "business-objection-suggestions-memo",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: setup wizard reaches Objections step without a hooks-order crash; clicking an objection-suggestion-* chip removes it from suggestions and adds it as objection-chip-<text>; only expected 401 console noise."
+    },
+    {
+      "criterion": "Frontend extraction regression: ReplyComposer turn-error + retry-turn-button on a failed live turn",
+      "name": "reply-composer-turn-error-retry",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "NEW: guest -> demo sim -> intercepted /turns to force a 502 -> turn-error + retry-turn-button rendered; clicking retry (route restored) clears turn-error and re-enables typed-reply-input."
+    },
+    {
+      "criterion": "Frontend extraction regression: CategoryDeltas renders delta-* rows on a scorecard with 2+ attempts",
+      "name": "scorecard-category-deltas-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "NEW: guest -> demo sim -> end -> scorecard-retry-same-prospect -> second call -> end -> scorecard now shows attempt-comparison + attempt-category-deltas with >=1 delta-* row."
+    },
+    {
+      "criterion": "Regression: coaching report full render (strengths-list/strength-*, retry-moment-<i>, moment-retry-banner)",
+      "name": "coaching-report-full-render",
+      "lane": "browser",
+      "status": "flaky",
+      "evidence": "First run timed out waiting for strength-* (grading not yet finished at the 5s assertion window given briefing's 10-40s grading latency); re-run by name passed cleanly with strengths-list, retry-moment-0, and moment-retry-banner all visible."
+    },
+    {
+      "criterion": "Regression: mic-check gates + skippable",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: gate blocks start until ready; skip enters call; second sim skips gate."
+    },
+    {
+      "criterion": "Regression: mic-check buyer voice uses ElevenLabs",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: POST /api/voice/speak -> 200 audio/*, voice-status becomes 'Ready'."
+    },
+    {
+      "criterion": "Regression: End Simulation hard stop (UI)",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: expected 409 on duplicate in-flight call, scorecard reached cleanly."
+    },
+    {
+      "criterion": "Regression: demo launch reaches simulation",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: demo-launch-button scrolled into view, simulation started."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard and history reachable after guest sign-in, no loop."
+    },
+    {
+      "criterion": "Regression: email signup/login persistence",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: signup -> logout -> re-login persists session; wrong password rejected."
+    },
+    {
+      "criterion": "Regression: session survives without cookies",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard still visible after clearing cookies (bearer fallback)."
+    },
+    {
+      "criterion": "Regression: no duplicate-key/max-update-depth/uncaught console errors",
+      "name": "no-react-key-hook-regressions",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: browsed /, /dashboard, /training, /sample-report, /voice-cast, live sim + spacebar mic toggle; no duplicate-key/max-update-depth/uncaught errors."
+    },
+    {
+      "criterion": "Regression: Retry That Moment UI flow end-to-end",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: graded report -> retry-moment-0 -> moment-retry-banner -> typed reply -> end -> moment-retry-summary; original sim unchanged."
+    },
+    {
+      "criterion": "Regression: rebrand has no VocalPitch references",
+      "name": "rebrand-no-vocalpitch",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: landing + dashboard scanned, no VocalPitch text."
+    },
+    {
+      "criterion": "Regression: sample report clearly labeled",
+      "name": "sample-report-clearly-labeled",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: sample-report page shows the clear labeling."
+    },
+    {
+      "criterion": "Regression: training library coming-soon cards",
+      "name": "training-library-coming-soon-cards",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: coming-soon cards render on /training."
+    },
+    {
+      "criterion": "Regression: voice cast verified with preview",
+      "name": "voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: voice-cast-list renders, preview click plays audio."
+    },
+    {
+      "criterion": "Regression: skill module prepare 'things to remember' list",
+      "name": "skill-module-prepare-remember-list",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: module-skip-to-call -> module-prepare visible with prepare-remember list of >=2 items."
+    }
+  ],
+  "bugs": [],
+  "action_items": [],
+  "notes": [
+    "Retest mode: ran the full backend pytest suite first (28 passed, 3 new files added this iteration), then re-ran all pre-existing named browser checks by name only, adding two new browser checks and three new backend test files to cover this iteration's briefing (refactor pass 5 on the live-turn path, the ElevenLabs proxy split, scenario generation/dashboard helper extraction, and the ReplyComposer/CategoryDeltas extraction).",
+    "New backend test files: test_tscheck_live_turn_guard.py (multi-turn recording, empty-utterance 422, turn-on-completed-call 409 — complements the existing after-End 409 coverage in test_tscheck_end_simulation_hard_stop.py), test_tscheck_voice_speak_proxy.py (known-character 200+headers, anonymous 401, over-cap 422, unknown-character fallback success, /voice/cast 8-verified-voices), test_tscheck_scenario_and_dashboard.py (Practice My Business profile+custom-scenario->simulation, and dashboard shape/consistency before and after a completed call).",
+    "New browser checks: reply-composer-turn-error-retry (route-intercepted 502 on /turns proves turn-error + retry-turn-button render and recovery), scorecard-category-deltas-render ('Run this exact prospect again' twice to get 2 attempts, then asserts attempt-category-deltas renders >=1 delta-* row).",
+    "coaching-report-full-render was flaky on first run only because the fixed 5s toBeVisible timeout in the persisted script is short relative to the briefing's stated 10-40s grading latency for this environment; it passed cleanly on immediate re-run with no code changes. Not classified as a bug (LLM grading latency variance, not a functional regression) but worth loosening that wait if it recurs.",
+    "BusinessSetup hook-order fix is exercised end-to-end by business-objection-suggestions-memo, which reaches the Objections step and completes the chip add/remove flow without a React hooks-order crash — this is the strongest evidence available for a fix framed as 'no crash on this exact page path'.",
+    "spec_deviations from the briefing (un-split SkillModule/BusinessSetup/Team's other tabs, decorative index keys, bearer token in localStorage, anonymous 401 on /api/auth/me) remain accepted as intentional, not flagged as bugs.",
+    "Console noise across all checks was limited to the expected anonymous 401 probe on GET /api/auth/me, the expected 409s from intentional concurrency/hard-stop tests, and the expected 502 injected by reply-composer-turn-error-retry's own route interception."
+  ]
+}

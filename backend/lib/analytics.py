@@ -268,18 +268,19 @@ def build_readiness(skills: list[dict], sims: list[dict]) -> dict[str, Any]:
     }
 
 
-def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
-    """sims: completed simulations, oldest first."""
-    scores = _completed_scores(sims)
-    skills = build_skills(sims)
-    unlocked = unlocked_difficulty(user.get("xp", 0), sims)
-    improvement = 0
-    if len(scores) >= 2:
-        half = max(1, len(scores) // 2)
-        improvement = round(sum(scores[half:]) / len(scores[half:])) - round(
-            sum(scores[:half]) / len(scores[:half])
-        )
-    trend = [
+def score_improvement(scores: list[int]) -> int:
+    """Second-half average minus first-half average — the simplest honest trend."""
+    if len(scores) < 2:
+        return 0
+    half = max(1, len(scores) // 2)
+    return round(sum(scores[half:]) / len(scores[half:])) - round(
+        sum(scores[:half]) / len(scores[:half])
+    )
+
+
+def build_trend(sims: list[dict]) -> list[dict[str, Any]]:
+    """Score-per-attempt series for the dashboard chart."""
+    return [
         {
             "index": i + 1,
             "label": f"#{i + 1}",
@@ -289,17 +290,31 @@ def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
         for i, s in enumerate(sims)
         if s.get("evaluation")
     ]
+
+
+def build_headline_stats(scores: list[int], skills: list[dict]) -> dict[str, Any]:
+    """The "how am I doing" block: averages, personal best, strongest/weakest."""
+    return {
+        "average_score": round(sum(scores) / len(scores)) if scores else 0,
+        "recent_score": scores[-1] if scores else None,
+        "improvement": score_improvement(scores),
+        "personal_best": max(scores) if scores else None,
+        "strongest_skill": skills[0] if skills else None,
+        "weakest_skill": skills[-1] if len(skills) > 1 else None,
+    }
+
+
+def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
+    """sims: completed simulations, oldest first."""
+    scores = _completed_scores(sims)
+    skills = build_skills(sims)
+    unlocked = unlocked_difficulty(user.get("xp", 0), sims)
     earned = earned_badges(user, sims)
     return {
         "user": {**user, "badges": earned},
         "completed": len(sims),
-        "average_score": round(sum(scores) / len(scores)) if scores else 0,
-        "recent_score": scores[-1] if scores else None,
-        "improvement": improvement,
-        "personal_best": max(scores) if scores else None,
-        "strongest_skill": skills[0] if skills else None,
-        "weakest_skill": skills[-1] if len(skills) > 1 else None,
-        "trend": trend,
+        **build_headline_stats(scores, skills),
+        "trend": build_trend(sims),
         "skills": skills,
         "exercise_stats": build_exercise_stats(sims),
         "difficulty_reached": max([s["difficulty"] for s in sims], default=1),

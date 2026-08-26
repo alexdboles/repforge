@@ -8,7 +8,6 @@ import {
   MicOff,
   PhoneOff,
   RotateCcw,
-  Send,
   Target,
   Volume2,
   VolumeX,
@@ -23,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import MicCheck, { audioAlreadyVerified } from "@/components/MicCheck";
 import WaveBars from "@/components/WaveBars";
 import TranscriptPanel from "@/components/TranscriptPanel";
-import { Input } from "@/components/ui/input";
+import ReplyComposer from "@/components/ReplyComposer";
 import { cn } from "@/lib/utils";
 
 function initials(name: string) {
@@ -497,54 +496,15 @@ export default function SimulationPage() {
                 </Button>
               </div>
 
-              <form
-                className="mt-3 flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  send(typed);
-                }}
-              >
-                <Input
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  placeholder={
-                    mic.supported
-                      ? "Or type what you'd say (useful without a microphone)"
-                      : "This browser has no speech recognition — type what you'd say"
-                  }
-                  className="border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500"
-                  data-testid="typed-reply-input"
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  disabled={!typed.trim() || sending}
-                  data-testid="send-typed-reply-button"
-                >
-                  <Send className="size-4" />
-                  Say it
-                </Button>
-              </form>
-              {turnError ? (
-                <div
-                  className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-[12.5px] text-amber-200"
-                  data-testid="turn-error"
-                >
-                  <span className="min-w-0 flex-1">
-                    {turnError} Your words were kept — retry when ready.
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => failedLine && send(failedLine)}
-                    disabled={sending || !failedLine}
-                    data-testid="retry-turn-button"
-                  >
-                    <RotateCcw className="size-3.5" />
-                    Retry
-                  </Button>
-                </div>
-              ) : null}
+              <ReplyComposer
+                typed={typed}
+                onTyped={setTyped}
+                onSend={send}
+                sending={sending}
+                micSupported={mic.supported}
+                turnError={turnError}
+                failedLine={failedLine}
+              />
               {mic.error ? (
                 <p className="mt-2 text-[12.5px] text-amber-400" data-testid="mic-error">
                   {mic.error}

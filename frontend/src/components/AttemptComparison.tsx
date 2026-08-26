@@ -4,7 +4,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { ArrowRight, TrendingDown, TrendingUp } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { scoreTone } from "@/lib/profile";
-import type { AttemptSeries } from "@/lib/types";
+import type { Attempt, AttemptSeries } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** "vs your previous attempts" — the proof that repetition is working. */
@@ -109,38 +109,7 @@ export default function AttemptComparison({
       </div>
 
       {!compact && deltas.length ? (
-        <div className="mt-4 border-t border-border pt-4" data-testid="attempt-category-deltas">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            First attempt vs latest, by competency
-          </div>
-          <div className="mt-2 divide-y divide-border">
-            {deltas.map(([cat, delta]) => (
-              <div
-                key={cat}
-                className="flex items-center justify-between py-2 text-[13.5px]"
-                data-testid={`delta-${cat.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                <span>{cat}</span>
-                <span className="flex items-center gap-3 font-mono">
-                  <span className="text-muted-foreground">{attempts[0].categories[cat]}</span>
-                  <ArrowRight className="size-3 text-muted-foreground" />
-                  <span className={scoreTone(attempts[attempts.length - 1].categories[cat])}>
-                    {attempts[attempts.length - 1].categories[cat]}
-                  </span>
-                  <span
-                    className={cn(
-                      "w-10 text-right font-semibold",
-                      delta >= 0 ? "text-emerald-600" : "text-red-600",
-                    )}
-                  >
-                    {delta > 0 ? "+" : ""}
-                    {delta}
-                  </span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <CategoryDeltas deltas={deltas} first={attempts[0]} latest={attempts[attempts.length - 1]} />
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
@@ -161,5 +130,51 @@ export default function AttemptComparison({
         ))}
       </div>
     </div>
+  );
+}
+
+/** First-attempt vs latest movement, one row per competency. */
+function CategoryDeltas({
+  deltas,
+  first,
+  latest,
+}: {
+  deltas: [string, number][];
+  first: Attempt;
+  latest: Attempt;
+}) {
+  return (
+  <div className="mt-4 border-t border-border pt-4" data-testid="attempt-category-deltas">
+    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      First attempt vs latest, by competency
+    </div>
+    <div className="mt-2 divide-y divide-border">
+      {deltas.map(([cat, delta]) => (
+        <div
+          key={cat}
+          className="flex items-center justify-between py-2 text-[13.5px]"
+          data-testid={`delta-${cat.toLowerCase().replace(/\s+/g, "-")}`}
+        >
+          <span>{cat}</span>
+          <span className="flex items-center gap-3 font-mono">
+            <span className="text-muted-foreground">{first.categories[cat]}</span>
+            <ArrowRight className="size-3 text-muted-foreground" />
+            <span className={scoreTone(latest.categories[cat])}>
+              {latest.categories[cat]}
+            </span>
+            <span
+              className={cn(
+                "w-10 text-right font-semibold",
+                delta >= 0 ? "text-emerald-600" : "text-red-600",
+              )}
+            >
+              {delta > 0 ? "+" : ""}
+              {delta}
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
   );
 }

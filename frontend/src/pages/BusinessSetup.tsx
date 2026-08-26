@@ -128,16 +128,16 @@ export default function BusinessSetup() {
     },
   });
 
-  if (!userId) return <Navigate to="/" replace />;
-
-  const set = <K extends keyof SalesProfileInput>(key: K, value: SalesProfileInput[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
-
   // Only recompute the suggestion chips when the rep's own objection list changes.
   const remainingSuggestions = useMemo(
     () => OBJECTION_SUGGESTIONS.filter((o) => !form.common_objections.includes(o)),
     [form.common_objections],
   );
+
+  if (!userId) return <Navigate to="/" replace />;
+
+  const set = <K extends keyof SalesProfileInput>(key: K, value: SalesProfileInput[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
 
   const addObjection = (text: string) => {
     const clean = text.trim();

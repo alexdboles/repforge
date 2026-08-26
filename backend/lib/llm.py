@@ -378,6 +378,43 @@ SCENARIO_SHAPE = """{
 }"""
 
 
+SCENARIO_STRING_KEYS = (
+    "prospect_name",
+    "prospect_role",
+    "company",
+    "company_size",
+    "industry",
+    "known",
+    "hidden",
+    "objective",
+    "mood",
+    "personality",
+)
+
+
+def _normalize_scenario(data: dict[str, Any]) -> dict[str, Any]:
+    """Coerce a generated scenario into the shape the simulator relies on."""
+    data["objections"] = [str(o) for o in (data.get("objections") or [])][:5]
+    for key in SCENARIO_STRING_KEYS:
+        data[key] = str(data.get(key) or "")
+    return data
+
+
+def _variation_brief(variation: dict[str, str], preferences: str) -> str:
+    """The knobs that make each generated scenario clearly different."""
+    lines = [
+        f"- Prospect personality: {variation['personality']}",
+        f"- Interest level: {variation['interest']}",
+        f"- Urgency: {variation['urgency']}",
+        f"- Decision authority: {variation['authority']}",
+        f"- Incumbent situation: {variation['incumbent']}",
+        f"- Communication style: {variation['style']}",
+    ]
+    if preferences:
+        lines.append(f"- Rep's requested focus: {preferences}")
+    return "\n".join(lines)
+
+
 async def generate_scenario(
     profile: dict[str, Any],
     exercise: dict[str, Any],
@@ -406,33 +443,11 @@ EXERCISE: {exercise['name']} — {exercise['description']}
 DIFFICULTY: Level {difficulty['level']} ({difficulty['name']}) — {difficulty['behavior']}
 
 VARIATION REQUIREMENTS (make this scenario clearly different from a default one):
-- Prospect personality: {variation['personality']}
-- Interest level: {variation['interest']}
-- Urgency: {variation['urgency']}
-- Decision authority: {variation['authority']}
-- Incumbent situation: {variation['incumbent']}
-- Communication style: {variation['style']}
-{f"- Rep's requested focus: {preferences}" if preferences else ""}
+{_variation_brief(variation, preferences)}
 
 Return JSON exactly in this shape:
 {SCENARIO_SHAPE}"""
-    raw = await chat.send_message(UserMessage(text=prompt))
-    data = _parse_json(raw)
-    data["objections"] = [str(o) for o in (data.get("objections") or [])][:5]
-    for key in (
-        "prospect_name",
-        "prospect_role",
-        "company",
-        "company_size",
-        "industry",
-        "known",
-        "hidden",
-        "objective",
-        "mood",
-        "personality",
-    ):
-        data[key] = str(data.get(key) or "")
-    return data
+    return _normalize_scenario(_parse_json(await chat.send_message(UserMessage(text=prompt))))
 
 
 def uuid_hint() -> str:

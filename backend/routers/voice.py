@@ -122,6 +122,34 @@ async def voice_cast(me: dict = Depends(current_user)):
     return out
 
 
+def _delivery(voice: dict, difficulty: int) -> dict:
+    """The character's own settings, nudged (not replaced) by difficulty."""
+    settings = dict(voice["settings"])
+    settings["stability"] = round(
+        min(0.75, max(0.2, settings["stability"] + DIFFICULTY_TRIM.get(difficulty, 0.0))), 2
+    )
+    return {**settings, "use_speaker_boost": True}
+
+
+async def _synthesize(voice: dict, text: str, settings: dict) -> bytes:
+    """One ElevenLabs call. Upstream errors are logged, never forwarded, because
+    their bodies can echo account/credential detail."""
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            res = await client.post(
+                f"{ELEVEN_URL}/{voice['voice_id']}",
+                headers={"xi-api-key": _key(), "Content-Type": "application/json"},
+                json={"text": _humanise(text), "model_id": MODEL_ID, "voice_settings": settings},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("elevenlabs unreachable: %s", exc)
+        raise HTTPException(status_code=502, detail="The prospect voice is unavailable.") from exc
+    if res.status_code >= 400:
+        logger.warning("elevenlabs tts failed with %s", res.status_code)
+        raise HTTPException(status_code=502, detail="The prospect voice is unavailable.")
+    return res.content
+
+
 @router.post("/voice/speak")
 async def speak(payload: SpeakRequest, me: dict = Depends(current_user)):
     # Paid resource: authenticated callers only, with a per-user hourly ceiling.
@@ -139,11 +167,7 @@ async def speak(payload: SpeakRequest, me: dict = Depends(current_user)):
         raise HTTPException(status_code=422, detail="No text to speak")
 
     voice = resolve(payload.character, payload.persona)
-    settings = dict(voice["settings"])
-    settings["stability"] = round(
-        min(0.75, max(0.2, settings["stability"] + DIFFICULTY_TRIM.get(payload.difficulty, 0.0))),
-        2,
-    )
+    settings = _delivery(voice, payload.difficulty)
     logger.info(
         "tts character=%s voice=%s model=%s difficulty=%s",
         voice["character"],
@@ -151,27 +175,9 @@ async def speak(payload: SpeakRequest, me: dict = Depends(current_user)):
         MODEL_ID,
         payload.difficulty,
     )
-    try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            res = await client.post(
-                f"{ELEVEN_URL}/{voice['voice_id']}",
-                headers={"xi-api-key": key, "Content-Type": "application/json"},
-                json={
-                    "text": _humanise(text),
-                    "model_id": MODEL_ID,
-                    "voice_settings": {**settings, "use_speaker_boost": True},
-                },
-            )
-    except httpx.HTTPError as exc:
-        logger.warning("elevenlabs unreachable: %s", exc)
-        raise HTTPException(status_code=502, detail="The prospect voice is unavailable.") from exc
-
-    if res.status_code >= 400:
-        # Upstream bodies can echo credential/account detail — never forward them.
-        logger.warning("elevenlabs tts failed with %s", res.status_code)
-        raise HTTPException(status_code=502, detail="The prospect voice is unavailable.")
+    audio = await _synthesize(voice, text, settings)
     return Response(
-        content=res.content,
+        content=audio,
         media_type="audio/mpeg",
         headers={"X-Voice-Character": voice["character"], "X-Voice-Label": voice["voice_label"]},
     )

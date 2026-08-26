@@ -175,15 +175,10 @@ async def start_simulation(payload: SimulationStart, me: dict = Depends(current_
     return Simulation(**_shield(sim.model_dump()))
 
 
-@router.post("/simulations/{sim_id}/turns", response_model=TurnResponse)
-async def add_turn(
-    sim_id: str, payload: TurnRequest, me: dict = Depends(current_user)
-):
-    text = payload.text.strip()[:2000]
-    if not text:
-        raise HTTPException(status_code=422, detail="Empty utterance")
+def _guard_turn(sim: dict, me: dict) -> None:
+    """Live-call guards: the session must be active, bounded in length, and the
+    rep must not be able to hammer paid turns."""
     rate_limit(f"turn:{me['id']}", 240, 3600, "Too many turns. Please slow down.")
-    sim = await _load(sim_id, me)
     if sim["status"] != "active":
         raise HTTPException(status_code=409, detail="Simulation already completed")
     if len(sim.get("transcript") or []) >= 120:
@@ -192,8 +187,42 @@ async def add_turn(
             detail="This call has reached its maximum length — end it to get your scorecard.",
         )
 
-    exercise = exercise_by_id(sim["exercise_id"])
-    difficulty = difficulty_by_level(sim["difficulty"])
+
+async def _prospect_reply(sim: dict, transcript: list[dict], text: str) -> str:
+    """Generate the buyer's answer, rolling the rep's line back on failure so a
+    client retry cannot duplicate it."""
+    sim_id = sim["id"]
+    try:
+        return await prospect_turn(
+            sim_id,
+            sim["scenario"],
+            exercise_by_id(sim["exercise_id"]),
+            difficulty_by_level(sim["difficulty"]),
+            transcript,
+            text,
+            sim.get("prior_context") or "",
+        )
+    except LlmUnavailable as exc:
+        await db.simulations.update_one({"id": sim_id}, {"$pop": {"transcript": 1}})
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        await db.simulations.update_one({"id": sim_id}, {"$pop": {"transcript": 1}})
+        logger.exception("prospect turn failed")
+        raise HTTPException(
+            status_code=502, detail="The AI prospect could not be reached."
+        ) from exc
+
+
+@router.post("/simulations/{sim_id}/turns", response_model=TurnResponse)
+async def add_turn(
+    sim_id: str, payload: TurnRequest, me: dict = Depends(current_user)
+):
+    text = payload.text.strip()[:2000]
+    if not text:
+        raise HTTPException(status_code=422, detail="Empty utterance")
+    sim = await _load(sim_id, me)
+    _guard_turn(sim, me)
+
     transcript = sim.get("transcript") or []
     # Persist what the rep said BEFORE the LLM call. Ending the call mid-generation
     # must still grade the words they actually spoke, and the prospect's late reply
@@ -202,25 +231,7 @@ async def add_turn(
         {"id": sim_id},
         {"$push": {"transcript": {"speaker": "rep", "text": text, "at": payload.at}}},
     )
-    try:
-        reply = await prospect_turn(
-            sim_id,
-            sim["scenario"],
-            exercise,
-            difficulty,
-            transcript,
-            text,
-            sim.get("prior_context") or "",
-        )
-    except (LlmUnavailable, Exception) as exc:  # noqa: BLE001
-        # Roll the rep's line back so the client's retry cannot duplicate it.
-        await db.simulations.update_one({"id": sim_id}, {"$pop": {"transcript": 1}})
-        if isinstance(exc, LlmUnavailable):
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        logger.exception("prospect turn failed")
-        raise HTTPException(
-            status_code=502, detail="The AI prospect could not be reached."
-        ) from exc
+    reply = await _prospect_reply(sim, transcript, text)
 
     # The call may have been ended while the prospect was "thinking": the reply is
     # then dropped entirely — it never reaches the transcript or the scoring.
