@@ -581,21 +581,24 @@ async def get_hint(sim_id: str, me: dict = Depends(current_user)):
             status_code=409,
             detail="Live hints are only available on Beginner and Developing levels.",
         )
-    exercise = exercise_by_id(sim["exercise_id"])
-    difficulty = difficulty_by_level(sim["difficulty"])
+    # Explicit flow: `data` is None until the coach answers, and a None result is
+    # turned into an error response rather than being consumed.
+    data: dict | None = None
     try:
         data = await coaching_hint(
             sim_id,
             sim["scenario"],
-            exercise,
-            difficulty,
+            exercise_by_id(sim["exercise_id"]),
+            difficulty_by_level(sim["difficulty"]),
             sim.get("transcript") or [],
             graded_principles(sim["exercise_id"]),
         )
     except LlmUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.exception("hint failed")
-        raise HTTPException(status_code=502, detail=f"Coach unavailable: {exc}") from exc
+        logger.exception("hint failed for simulation %s", sim_id)
+        raise HTTPException(status_code=502, detail="The coach is unavailable.") from exc
+    if not data:
+        raise HTTPException(status_code=502, detail="The coach had nothing useful to add.")
     # Level 1 shows the wording outright; Level 2 keeps it behind a reveal.
     return Hint(**data, reveal_example=sim["difficulty"] == 1)

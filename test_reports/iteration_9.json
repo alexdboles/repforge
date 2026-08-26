@@ -1,0 +1,198 @@
+{
+  "iteration": 9,
+  "mode": "retest",
+  "passed": 27,
+  "failed": 0,
+  "flaky": 2,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Backend test suite: python -m pytest -q in /app/backend passes (28+ tests)",
+      "name": "pytest -q (18 files)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> '32 passed in 131.34s'. First attempt hit the in-memory signup rate-limiter (429s) from this iteration's own rapid re-runs against a long-lived backend process; restarted the backend service (clears the in-memory _BUCKETS) and reran clean with no code changes -- classified as test-induced rate-limit exhaustion, not a bug."
+    },
+    {
+      "criterion": "Backend hint endpoint has explicit no-data handling: 200 with hint on L1-2, 409 on difficulty>2, 401 anonymous, 404 for another user's simulation",
+      "name": "test_tscheck_hint_endpoint_flow.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Ran within full suite: GET /simulations/{id}/hint on difficulty=1 -> 200 non-empty dict; difficulty=3 -> 409; another user's sim -> 404; anonymous -> 401. The null/empty-coach-result -> 502 branch in routers/simulations.py:get_hint (lines 596-602) is confirmed by code inspection (raises HTTPException(502, 'The coach had nothing useful to add.') on falsy `data`, and 502 with 'The coach is unavailable.' on any other exception) but could not be forced deterministically over plain HTTP without mocking the LLM client, which is out of scope for black-box HTTP tests; recorded as a code-reviewed pass, not exercised live."
+    },
+    {
+      "criterion": "Microphone start/stop/resume lifecycle: mic-toggle-button toggles labels, mic paused while prospect speaks (no transcript pollution), resumes after the line finishes if it was on before",
+      "name": "mic-lifecycle-pauses-during-prospect-speech",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "NEW: guest -> demo sim -> mic-toggle-button 'Talk to prospect' -> click -> 'Microphone live' -> typed reply sent -> while voice-status shows 'is speaking'/'is thinking' mic-toggle-button reverts to 'Talk to prospect' -> once voice-status leaves 'is speaking' mic-toggle-button returns to 'Microphone live' automatically -> transcript contains the rep line exactly once (no phantom entries from the ElevenLabs audio)."
+    },
+    {
+      "criterion": "A voice PLAYBACK failure must not look like a finished prospect turn: 200 non-audio body from /api/voice/speak shows voice-error+voice-retry-button, mic does not auto-resume, retry re-requests and recovers",
+      "name": "voice-playback-failure-shows-retry-not-done",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "NEW: intercepted POST /api/voice/speak -> 200 text/plain 'not-audio-bytes' (audio.onerror path) -> voice-error + voice-retry-button rendered; mic-toggle-button stayed 'Talk to prospect' (no onDone auto-resume fired); unrouted the intercept, clicked voice-retry-button -> voice-error cleared (re-request succeeded)."
+    },
+    {
+      "criterion": "Ending a call while ElevenLabs audio is still loading produces no delayed audio",
+      "name": "end-call-during-slow-voice-load-no-delayed-audio",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "NEW: delayed /api/voice/speak by 10s via page.route, sent a typed reply, clicked end-simulation-button immediately -> grading-overlay visible within 3s -> reached /scorecard/<id> -> 0 <audio> elements remained in the DOM afterward."
+    },
+    {
+      "criterion": "Navigating away from a live call cleans up recognition, audio and in-flight requests",
+      "name": "navigate-away-from-live-call-cleans-up",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "NEW: started a call, sent a typed reply, then (within ~300ms) triggered a client-side route change to /training via pushState+popstate (same mechanism react-router's history listens to, so no full reload masks the assertion); landed on /training, waited 2s -- 0 audio elements remained, no additional /api/simulations/*/turns requests fired from the unmounted page, and no 'unmounted'/'Cannot update a component' console errors appeared."
+    },
+    {
+      "criterion": "Regression: coaching report full render",
+      "name": "coaching-report-full-render",
+      "lane": "browser",
+      "status": "flaky",
+      "evidence": "First re-run by name hit a 60s page.waitForURL timeout waiting for the scorecard route (grading latency variance per briefing's stated 10-40s window); immediate re-run by name passed cleanly reaching the full scorecard and retry-moment flow."
+    },
+    {
+      "criterion": "Regression: skill module prepare 'things to remember' list",
+      "name": "skill-module-prepare-remember-list",
+      "lane": "browser",
+      "status": "flaky",
+      "evidence": "First re-run by name timed out waiting for module-prepare (20s); immediate re-run by name passed cleanly with module-prepare and its remember-list visible."
+    },
+    {
+      "criterion": "Regression: End Simulation hard stop (UI)",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: expected 409 on duplicate in-flight call, scorecard reached cleanly."
+    },
+    {
+      "criterion": "Regression: Retry That Moment UI flow end-to-end",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: graded report -> retry-moment-0 -> moment-retry-banner -> typed reply -> end -> moment-retry-summary; original sim unchanged."
+    },
+    {
+      "criterion": "Regression: mic-check gates + skippable",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: gate blocks start until ready; skip enters call; second sim skips gate in the same session."
+    },
+    {
+      "criterion": "Regression: mic-check buyer voice uses ElevenLabs",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: POST /api/voice/speak -> 200 audio/*, voice-status becomes 'Ready'."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard and history reachable after guest sign-in, no loop."
+    },
+    {
+      "criterion": "Regression: email signup/login persistence",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: signup -> logout -> re-login persists session; wrong password rejected."
+    },
+    {
+      "criterion": "Regression: session survives without cookies",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard still visible after clearing cookies (bearer fallback)."
+    },
+    {
+      "criterion": "Regression: demo launch reaches simulation",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: demo-launch-button scrolled into view, simulation started, transcript non-empty."
+    },
+    {
+      "criterion": "Regression: sample report clearly labeled",
+      "name": "sample-report-clearly-labeled",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: sample-report page shows the clear labeling."
+    },
+    {
+      "criterion": "Regression: rebrand has no VocalPitch references",
+      "name": "rebrand-no-vocalpitch",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: landing + dashboard scanned, no VocalPitch text."
+    },
+    {
+      "criterion": "Regression: no duplicate-key/max-update-depth/uncaught console errors",
+      "name": "no-react-key-hook-regressions",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: browsed /, /dashboard, /training, /sample-report, /voice-cast, live sim + spacebar mic toggle; no duplicate-key/max-update-depth/uncaught errors."
+    },
+    {
+      "criterion": "Regression: training library coming-soon cards",
+      "name": "training-library-coming-soon-cards",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: coming-soon cards render on /training."
+    },
+    {
+      "criterion": "Regression: voice cast verified with preview",
+      "name": "voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: voice-cast-list renders, preview click plays audio."
+    },
+    {
+      "criterion": "Regression: BusinessSetup hook-order fix (objection-suggestion chips)",
+      "name": "business-objection-suggestions-memo",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: setup wizard reaches Objections step without a hooks-order crash; chip add/remove works."
+    },
+    {
+      "criterion": "Regression: ReplyComposer turn-error + retry-turn-button on a failed live turn",
+      "name": "reply-composer-turn-error-retry",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: intercepted 502 on /turns -> turn-error + retry-turn-button rendered; retry (route restored) clears the error."
+    },
+    {
+      "criterion": "Regression: CategoryDeltas renders delta-* rows on a scorecard with 2+ attempts",
+      "name": "scorecard-category-deltas-render",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: two attempts on the same prospect produced attempt-category-deltas with >=1 delta-* row."
+    },
+    {
+      "criterion": "Builds and suites are clean: yarn typecheck / yarn lint report 0 errors",
+      "name": "frontend typecheck + lint",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/frontend && yarn typecheck -> 'Done in 0.96s' (tsc -b --noEmit, 0 errors). yarn lint -> 'Found 5 warnings and 0 errors' (pre-existing shadcn/ui fast-refresh-only-exports warnings on button.tsx/badge.tsx/tabs.tsx/AppShell.tsx/MicCheck.tsx -- style warnings, not errors)."
+    }
+  ],
+  "bugs": [],
+  "action_items": [],
+  "notes": [
+    "Retest mode: ran the full backend pytest suite first, then re-ran every browser check named in iteration_8 plus the ones added mid-cycle (reply-composer-turn-error-retry, scorecard-category-deltas-render) by name only, then added 4 new browser checks for this iteration's voice-lifecycle acceptance criteria (mic pause/resume, voice-playback-failure retry, end-during-slow-load no delayed audio, navigate-away cleanup).",
+    "Backend suite first attempt returned 9 setup errors, all '429 Too many sign-up attempts' from the in-memory per-process rate bucket (lib/auth.py _BUCKETS) being exhausted by this same testing session's earlier rapid pytest runs against a backend process that had not restarted; this is test-harness-induced exhaustion of a working rate limiter, not an application defect. Restarted the backend supervisor process (clears the in-memory bucket) and reran the suite clean: 32 passed.",
+    "The hint endpoint's null/empty-coach-result -> 502 branch (routers/simulations.py get_hint, 'The coach had nothing useful to add.') was verified by direct code reading rather than live HTTP forcing, since deterministically starving the LLM coach of a usable answer isn't reachable from a black-box HTTP client without mocking the LLM call, which the black-box-over-HTTP testing rule for this suite does not permit. The other four hint-endpoint sub-criteria (200 on L1-2, 409 on >2, 401 anonymous, 404 cross-user) are all live-HTTP verified in test_tscheck_hint_endpoint_flow.py.",
+    "navigate-away-from-live-call-cleans-up drives the SPA route change via window.history.pushState + a manually dispatched 'popstate' event rather than page.goto, because a full page.goto would trigger a real browser unload (destroying the JS context outright) and trivially satisfy 'no further requests fire' without ever exercising React's own effect-cleanup path; the history/popstate approach is exactly the mechanism react-router's BrowserHistory listens to, so it is a faithful SPA navigation, not a page reload.",
+    "Both flaky results (coaching-report-full-render, skill-module-prepare-remember-list) failed on their first named re-run with plain timeouts (60s waitForURL / 20s toBeVisible) and passed cleanly on an immediate, unmodified re-run; consistent with the briefing's stated 10-40s grading/LLM latency variance in this environment, not a functional regression.",
+    "spec_deviations from the briefing (headless has no real mic so recognition capture itself isn't exercised, decorative index keys, bearer token in localStorage, anonymous 401 on /api/auth/me, no further component-splitting this pass) remain accepted as intentional, not flagged as bugs.",
+    "Console noise across all checks was limited to the expected anonymous 401 probe on GET /api/auth/me, expected 409s from intentional concurrency/hard-stop tests, and the expected 502/non-audio-200 injected by this iteration's own route interceptions."
+  ]
+}

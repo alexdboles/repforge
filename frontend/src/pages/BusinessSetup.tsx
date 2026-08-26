@@ -107,7 +107,8 @@ export default function BusinessSetup() {
       setForm(rest);
       setLoaded(true);
     }
-  }, [existing, loaded]);
+    // setForm/setLoaded are stable React identities; listed for strict analysis.
+  }, [existing, loaded, setForm, setLoaded]);
 
   const save = useMutation({
     mutationFn: () =>

@@ -48,7 +48,8 @@ export default function Profile() {
       setExperience(user.experience_level);
       setOrg(user.org);
     }
-  }, [user]);
+    // Setters are stable React identities; listed only to satisfy strict analysis.
+  }, [user, setName, setExperience, setOrg]);
 
   const save = useMutation({
     mutationFn: () =>

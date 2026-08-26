@@ -66,7 +66,16 @@ export default function SimulationPage() {
   // Audio readiness gate: the graded call (and the prospect's opening line) only
   // begins once the rep has passed — or skipped — the check.
   const [callStarted, setCallStarted] = useState(audioAlreadyVerified());
-  const voice = useProspectVoice(
+  const {
+    speak,
+    silence,
+    retry: retryVoice,
+    speaking,
+    phase: voicePhase,
+    error: voiceError,
+    usingElevenLabs,
+    voiceChecked,
+  } = useProspectVoice(
     sim?.scenario?.prospect_name ?? "",
     sim?.voice_persona ?? "default",
     sim?.difficulty ?? 2,
@@ -115,7 +124,15 @@ export default function SimulationPage() {
     turnRef.current.mutate(clean);
   }, []);
 
-  const mic = useMic(send);
+  const {
+    listening: micListening,
+    interim: micInterim,
+    error: micError,
+    start: startMic,
+    stop: stopMic,
+    abort: abortMic,
+    supported: micSupported,
+  } = useMic(send);
 
   // Speak the prospect's reply, pausing the microphone so it doesn't hear itself.
   useEffect(() => {
@@ -123,11 +140,11 @@ export default function SimulationPage() {
     const line = pendingSpeak;
     setPendingSpeak(null);
     if (muted || endedRef.current) return;
-    mic.stop();
-    voice.speak(line, () => {
-      if (micWanted.current && !endedRef.current) mic.start();
+    stopMic();
+    speak(line, () => {
+      if (micWanted.current && !endedRef.current) startMic();
     });
-  }, [pendingSpeak, muted, mic, voice]); // mic/voice are stable hook APIs
+  }, [pendingSpeak, muted, speak, startMic, stopMic]);
 
   const coachingOn = Boolean(sim && sim.difficulty <= 2);
   const { data: hint, isFetching: hintLoading } = useQuery({
@@ -186,21 +203,21 @@ export default function SimulationPage() {
     const opening = sim.transcript.find((t) => t.speaker === "prospect");
     if (!opening) return;
     openedRef.current = true;
-    voice.speak(opening.text);
-  }, [sim, muted, voice, callStarted]);
+    speak(opening.text);
+  }, [sim, muted, speak, callStarted]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [turns, pendingRep]);
 
   const toggleMic = () => {
-    if (mic.listening) {
+    if (micListening) {
       micWanted.current = false;
-      mic.stop();
+      stopMic();
     } else {
       micWanted.current = true;
-      voice.silence();
-      mic.start();
+      silence();
+      startMic();
     }
   };
 
@@ -236,8 +253,7 @@ export default function SimulationPage() {
   }
 
   const scenario = sim?.scenario;
-  const speaking = voice.speaking;
-  const thinking = turnMutation.isPending || voice.phase === "loading";
+  const thinking = turnMutation.isPending || voicePhase === "loading";
   // Only an in-flight turn blocks sending. Voice loading must never disable the
   // reply controls — the rep would silently lose the line they just typed.
   const sending = turnMutation.isPending;
@@ -254,7 +270,7 @@ export default function SimulationPage() {
           className: "bg-sky-500/15 text-sky-300",
           dot: "bg-sky-400 animate-pulse",
         }
-      : mic.listening
+      : micListening
         ? {
             label: "Listening — speak now",
             className: "bg-emerald-500/15 text-emerald-300",
@@ -303,11 +319,11 @@ export default function SimulationPage() {
             </span>
           ) : null}
           <span className="text-[11px] text-slate-500" data-testid="voice-provider">
-            {!voice.voiceChecked
+            {!voiceChecked
               ? "Preparing voice…"
-              : voice.error
+              : voiceError
                 ? "Voice failed"
-                : voice.usingElevenLabs
+                : usingElevenLabs
                   ? `ElevenLabs voice · ${sim?.scenario?.prospect_name?.split(" ")[0] ?? "prospect"}`
                   : "Voice unavailable"}
           </span>
@@ -405,26 +421,26 @@ export default function SimulationPage() {
               turns={turns}
               prospectName={scenario.prospect_name}
               pendingRep={pendingRep}
-              interim={mic.interim}
+              interim={micInterim}
               scrollRef={scrollRef}
             />
 
             <WaveBars
-              active={speaking || mic.listening}
-              tone={speaking ? "prospect" : mic.listening ? "rep" : "idle"}
+              active={speaking || micListening}
+              tone={speaking ? "prospect" : micListening ? "rep" : "idle"}
             />
 
             <div className="border-t border-[#1E293B] px-5 py-4">
-              {voice.error ? (
+              {voiceError ? (
                 <div
                   className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-[12.5px] text-red-200"
                   data-testid="voice-error"
                 >
-                  <span className="min-w-0 flex-1">{voice.error}</span>
+                  <span className="min-w-0 flex-1">{voiceError}</span>
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => voice.retry()}
+                    onClick={() => retryVoice()}
                     data-testid="voice-retry-button"
                   >
                     <RotateCcw className="size-3.5" />
@@ -439,13 +455,13 @@ export default function SimulationPage() {
                   data-testid="mic-toggle-button"
                   className={cn(
                     "font-semibold",
-                    mic.listening
+                    micListening
                       ? "bg-emerald-600 hover:bg-emerald-700"
                       : "bg-slate-100 text-slate-900 hover:bg-white",
                   )}
                 >
-                  {mic.listening ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-                  {mic.listening ? "Microphone live" : "Talk to prospect"}
+                  {micListening ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+                  {micListening ? "Microphone live" : "Talk to prospect"}
                 </Button>
 
                 <Button
@@ -453,7 +469,7 @@ export default function SimulationPage() {
                   size="icon-lg"
                   onClick={() => {
                     setMuted((m) => !m);
-                    voice.silence();
+                    silence();
                   }}
                   data-testid="speaker-toggle-button"
                   className="text-slate-300 hover:bg-slate-800"
@@ -471,8 +487,8 @@ export default function SimulationPage() {
                     endedRef.current = true;
                     setEnded(true);
                     micWanted.current = false;
-                    mic.abort();
-                    voice.silence();
+                    abortMic();
+                    silence();
                     turnMutation.reset();
                     setPendingRep(null);
                     setPendingSpeak(null);
@@ -501,13 +517,13 @@ export default function SimulationPage() {
                 onTyped={setTyped}
                 onSend={send}
                 sending={sending}
-                micSupported={mic.supported}
+                micSupported={micSupported}
                 turnError={turnError}
                 failedLine={failedLine}
               />
-              {mic.error ? (
+              {micError ? (
                 <p className="mt-2 text-[12.5px] text-amber-400" data-testid="mic-error">
-                  {mic.error}
+                  {micError}
                 </p>
               ) : (
                 <p className="mt-2 text-[12px] text-slate-500">

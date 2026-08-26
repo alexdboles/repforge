@@ -284,7 +284,7 @@ export default function SkillModule() {
                     {mod.knowledge_check.map((q, qi) => {
                       const picked = answers[qi];
                       return (
-                        <div key={qi} data-testid={`quiz-item-${qi}`}>
+                        <div key={`${qi}-${q.question.slice(0, 32)}`} data-testid={`quiz-item-${qi}`}>
                           <div className="text-[14.5px] font-semibold">{q.question}</div>
                           <div className="mt-2.5 grid gap-2">
                             {q.options.map((opt, oi) => {
@@ -293,7 +293,7 @@ export default function SkillModule() {
                               const revealed = picked !== undefined;
                               return (
                                 <button
-                                  key={oi}
+                                  key={`${oi}-${opt.slice(0, 24)}`}
                                   type="button"
                                   onClick={() => setAnswers((a) => ({ ...a, [qi]: oi }))}
                                   data-testid={`quiz-${qi}-option-${oi}`}

@@ -116,18 +116,42 @@ export function useMic(onUtterance: (text: string) => void) {
     try {
       rec.start();
       setListening(true);
-    } catch (err) {
-      console.error("microphone start failed", err);
+    } catch {
+      // Never leave the state machine believing recognition is still wanted.
+      wantRef.current = false;
+      recRef.current = null;
+      setListening(false);
       setError("Microphone could not be started. Use the text box to reply.");
     }
   }, []);
 
-  useEffect(() => () => recRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      // Explicit shutdown: recognition must not restart once this component is gone.
+      wantRef.current = false;
+      const rec = recRef.current;
+      recRef.current = null;
+      if (!rec) return;
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      try {
+        rec.abort();
+      } catch {
+        // Already stopped by the engine — nothing to unwind.
+      }
+    },
+    [],
+  );
 
   return { listening, interim, error, start, stop, abort, supported: speechSupported() };
 }
 
 export type VoicePhase = "idle" | "loading" | "speaking";
+
+function voiceErrorMessage(character: string): string {
+  return `${character || "The prospect"}'s voice could not be played. No generic voice is substituted — retry to hear them.`;
+}
 
 /** Prospect voice: the approved ElevenLabs voice for this character, produced by
  * our own backend (the API key never reaches the client — we only POST text to
@@ -224,25 +248,32 @@ export function useProspectVoice(character = "", persona = "default", difficulty
             setVoiceReady(true);
             setPhase("speaking");
           };
-          const finish = () => {
+          audio.onended = () => {
             setSpeaking(false);
             setPhase("idle");
             cleanupAudio();
             if (gen !== genRef.current) return;
             onDone?.();
           };
-          audio.onended = finish;
-          audio.onerror = finish;
+          // A playback failure is NOT a finished turn: the rep never heard the
+          // prospect, so surface the error and leave the mic closed until Retry.
+          audio.onerror = () => {
+            setSpeaking(false);
+            setPhase("idle");
+            cleanupAudio();
+            if (gen !== genRef.current) return;
+            setError(voiceErrorMessage(characterRef.current));
+          };
           await audio.play();
         })
         .catch((err: unknown) => {
-          if (gen !== genRef.current) return;
           if (err instanceof DOMException && err.name === "AbortError") return;
+          // Always release the audio element / object URL, even for a stale generation.
+          cleanupAudio();
+          if (gen !== genRef.current) return;
           setSpeaking(false);
           setPhase("idle");
-          setError(
-            `${characterRef.current || "The prospect"}'s voice could not be loaded. No generic voice is substituted — retry to hear them.`,
-          );
+          setError(voiceErrorMessage(characterRef.current));
         });
     },
     [cleanupAudio],
@@ -265,6 +296,11 @@ export function useProspectVoice(character = "", persona = "default", difficulty
 
   useEffect(
     () => () => {
+      // A request started by a destroyed component must never create audio or
+      // touch React state afterwards.
+      genRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
       window.speechSynthesis?.cancel();
       cleanupAudio();
     },
