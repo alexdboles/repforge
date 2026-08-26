@@ -88,28 +88,22 @@ async def _load(sim_id: str, me: dict) -> dict:
     return sim
 
 
-@router.post("/simulations", response_model=Simulation)
-async def start_simulation(payload: SimulationStart, me: dict = Depends(current_user)):
-    # Identity comes from the session cookie; a user_id in the body is ignored.
-    payload.user_id = me["id"]
+async def _guard_new_simulation(me: dict) -> None:
+    """Cost + concurrency guard before any paid work is started."""
     rate_limit(
         f"start:{me['id']}", 40, 3600, "Too many simulations started. Please wait a few minutes."
     )
-    active = await db.simulations.count_documents(
-        {"user_id": me["id"], "status": "active"}
-    )
+    active = await db.simulations.count_documents({"user_id": me["id"], "status": "active"})
     if active >= 3:
         raise HTTPException(
             status_code=409,
             detail="You already have live simulations open. End one before starting another.",
         )
-    exercise = exercise_by_id(payload.exercise_id)
-    if not exercise:
-        raise HTTPException(status_code=404, detail="Unknown exercise")
-    difficulty = difficulty_by_level(payload.difficulty)
-    if not difficulty:
-        raise HTTPException(status_code=422, detail="Difficulty must be 1-5")
 
+
+async def _resolve_scenario(payload: SimulationStart, exercise: dict, me: dict) -> dict:
+    """Pick the scenario for this run: a journey stage, the rep's own custom
+    scenario, an explicitly requested one, or a random one for the exercise."""
     if payload.journey_id:
         journey = journey_by_id(payload.journey_id)
         if not journey:
@@ -120,22 +114,37 @@ async def start_simulation(payload: SimulationStart, me: dict = Depends(current_
                 status_code=422,
                 detail=f"{journey['character']} has no {exercise['name']} stage in this journey",
             )
-    elif payload.custom_scenario_id:
+        return scenario
+    if payload.custom_scenario_id:
         custom = await db.custom_scenarios.find_one(
             {"id": payload.custom_scenario_id}, {"_id": 0}
         )
         if not custom:
             raise HTTPException(status_code=404, detail="Custom scenario not found")
         require_owned(custom, me, "Custom scenario")
-        scenario = _scenario_from_custom(custom)
-    else:
-        scenario = (
-            scenario_by_id(payload.scenario_id)
-            if payload.scenario_id
-            else secrets.choice(scenarios_for_exercise(payload.exercise_id))
-        )
+        return _scenario_from_custom(custom)
+    scenario = (
+        scenario_by_id(payload.scenario_id)
+        if payload.scenario_id
+        else secrets.choice(scenarios_for_exercise(payload.exercise_id))
+    )
     if not scenario:
         raise HTTPException(status_code=404, detail="Unknown scenario")
+    return scenario
+
+
+@router.post("/simulations", response_model=Simulation)
+async def start_simulation(payload: SimulationStart, me: dict = Depends(current_user)):
+    # Identity comes from the session cookie; a user_id in the body is ignored.
+    payload.user_id = me["id"]
+    await _guard_new_simulation(me)
+    exercise = exercise_by_id(payload.exercise_id)
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Unknown exercise")
+    difficulty = difficulty_by_level(payload.difficulty)
+    if not difficulty:
+        raise HTTPException(status_code=422, detail="Difficulty must be 1-5")
+    scenario = await _resolve_scenario(payload, exercise, me)
 
     sim = Simulation(
         user_id=payload.user_id,
@@ -223,6 +232,54 @@ async def add_turn(
     return TurnResponse(reply=reply, turn_index=len(transcript) + 1)
 
 
+async def _claim_for_grading(sim_id: str) -> None:
+    """Idempotency guard: two rapid End clicks must not produce two analyses or
+    double XP. The first request flips the row to "analyzing"; the second bounces."""
+    claim = await db.simulations.update_one(
+        {"id": sim_id, "status": "active"}, {"$set": {"status": "analyzing"}}
+    )
+    if claim.modified_count != 1:
+        raise HTTPException(status_code=409, detail="This call is already being graded.")
+
+
+async def _grade(sim: dict, transcript: list[dict], duration: int) -> Evaluation:
+    """Run the coaching analysis, releasing the grading claim if it fails so the
+    rep can retry ending the call."""
+    sim_id = sim["id"]
+    try:
+        raw = await evaluate_conversation(
+            sim_id,
+            sim["scenario"],
+            exercise_by_id(sim["exercise_id"]),
+            difficulty_by_level(sim["difficulty"]),
+            transcript,
+            duration,
+            focus=focus_categories(sim["exercise_id"]),
+            principles=graded_principles(sim["exercise_id"]),
+            prior=sim.get("prior_context") or "",
+        )
+        return Evaluation(**raw)
+    except LlmUnavailable as exc:
+        await db.simulations.update_one({"id": sim_id}, {"$set": {"status": "active"}})
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("evaluation failed for simulation %s", sim_id)
+        await db.simulations.update_one({"id": sim_id}, {"$set": {"status": "active"}})
+        raise HTTPException(
+            status_code=502, detail="Coaching analysis failed. Please try ending the call again."
+        ) from exc
+
+
+async def _moment_outcome(sim: dict, score: int) -> dict:
+    """Retry That Moment result: did this attempt beat the original call?"""
+    if sim.get("mode") != "moment":
+        return {}
+    improved = score >= int(sim.get("origin_score") or 0)
+    if improved:
+        await db.users.update_one({"id": sim["user_id"]}, {"$inc": {"moments_corrected": 1}})
+    return {"moment_improved": improved}
+
+
 @router.post("/simulations/{sim_id}/complete", response_model=Simulation)
 async def complete_simulation(sim_id: str, me: dict = Depends(current_user)):
     sim = await _load(sim_id, me)
@@ -236,40 +293,11 @@ async def complete_simulation(sim_id: str, me: dict = Depends(current_user)):
             detail="No salesperson speech was captured — say something to the prospect before ending the call.",
         )
 
-    # Idempotency guard: two rapid End clicks must not produce two analyses or
-    # double XP. The first request flips the row to "analyzing"; the second bounces.
-    claim = await db.simulations.update_one(
-        {"id": sim_id, "status": "active"}, {"$set": {"status": "analyzing"}}
-    )
-    if claim.modified_count != 1:
-        raise HTTPException(status_code=409, detail="This call is already being graded.")
+    await _claim_for_grading(sim_id)
 
     ended = datetime.now(timezone.utc)
     duration = max(1, int((ended - _aware(sim["started_at"])).total_seconds()))
-    exercise = exercise_by_id(sim["exercise_id"])
-    difficulty = difficulty_by_level(sim["difficulty"])
-    try:
-        raw = await evaluate_conversation(
-            sim_id,
-            sim["scenario"],
-            exercise,
-            difficulty,
-            transcript,
-            duration,
-            focus=focus_categories(sim["exercise_id"]),
-            principles=graded_principles(sim["exercise_id"]),
-            prior=sim.get("prior_context") or "",
-        )
-        evaluation = Evaluation(**raw)
-    except LlmUnavailable as exc:
-        await db.simulations.update_one({"id": sim_id}, {"$set": {"status": "active"}})
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("evaluation failed for simulation %s", sim_id)
-        await db.simulations.update_one({"id": sim_id}, {"$set": {"status": "active"}})
-        raise HTTPException(
-            status_code=502, detail="Coaching analysis failed. Please try ending the call again."
-        ) from exc
+    evaluation = await _grade(sim, transcript, duration)
 
     xp = round(evaluation.overall_score / 2) + sim["difficulty"] * 10
     updates = {
@@ -278,14 +306,8 @@ async def complete_simulation(sim_id: str, me: dict = Depends(current_user)):
         "duration_seconds": duration,
         "evaluation": evaluation.model_dump(),
         "xp_awarded": xp,
+        **await _moment_outcome(sim, evaluation.overall_score),
     }
-    if sim.get("mode") == "moment":
-        improved = evaluation.overall_score >= int(sim.get("origin_score") or 0)
-        updates["moment_improved"] = improved
-        if improved:
-            await db.users.update_one(
-                {"id": sim["user_id"]}, {"$inc": {"moments_corrected": 1}}
-            )
     await db.simulations.update_one({"id": sim_id}, {"$set": updates})
     await _award(sim["user_id"], xp)
     await _close_assignment(sim, evaluation.overall_score, ended)
@@ -455,22 +477,29 @@ async def list_simulations(user_id: str, me: dict = Depends(current_user)):
     return [SimulationSummary(**summarize(s)) for s in sims]
 
 
+def _lines(value: str | None) -> list[str]:
+    return [line.strip() for line in (value or "").split("\n") if line.strip()]
+
+
+def _product_sheet(profile: dict, custom: dict) -> dict:
+    """The rep's own product facts, in the shape the prospect engine reads."""
+    return {
+        "name": profile.get("product") or custom.get("product") or "your product",
+        "one_liner": profile.get("product_description") or "",
+        "features": _lines(profile.get("benefits")),
+        "benefits": _lines(profile.get("problems_solved")),
+        "pricing": profile.get("pricing") or "",
+        "differentiators": _lines(profile.get("differentiators")),
+        "limitations": [],
+        "use_cases": [profile.get("ideal_customer")] if profile.get("ideal_customer") else [],
+    }
+
+
 def _scenario_from_custom(custom: dict) -> dict:
     """Turn a stored AI-generated scenario into the scenario shape the prospect
     engine and brief screens expect, carrying the rep's own product sheet."""
     profile = custom.get("profile") or {}
-    sheet = {
-        "name": profile.get("product") or custom.get("product") or "your product",
-        "one_liner": profile.get("product_description") or "",
-        "features": [f for f in (profile.get("benefits") or "").split("\n") if f.strip()],
-        "benefits": [b for b in (profile.get("problems_solved") or "").split("\n") if b.strip()],
-        "pricing": profile.get("pricing") or "",
-        "differentiators": [
-            d for d in (profile.get("differentiators") or "").split("\n") if d.strip()
-        ],
-        "limitations": [],
-        "use_cases": [profile.get("ideal_customer") or ""] if profile.get("ideal_customer") else [],
-    }
+    sheet = _product_sheet(profile, custom)
     return {
         "id": custom["id"],
         "product": custom.get("product") or profile.get("product") or "your product",

@@ -1,4 +1,6 @@
 """Attempt comparison and the org-level team view."""
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.analytics import build_skills, build_exercise_stats
@@ -89,6 +91,58 @@ async def attempt_series(user_id: str, exercise_id: str, me: dict = Depends(curr
     return series
 
 
+def _scores(sims: list[dict]) -> list[int]:
+    return [
+        int((s.get("evaluation") or {}).get("overall_score", 0))
+        for s in sims
+        if s.get("evaluation")
+    ]
+
+
+def _improvement(scores: list[int]) -> int:
+    """Second half average minus first half average — the simplest honest trend."""
+    if len(scores) < 2:
+        return 0
+    half = max(1, len(scores) // 2)
+    return round(sum(scores[half:]) / len(scores[half:])) - round(
+        sum(scores[:half]) / len(scores[:half])
+    )
+
+
+def _team_member(user: dict, sims: list[dict]) -> TeamMember:
+    scores = _scores(sims)
+    skills = build_skills(sims)
+    return TeamMember(
+        user_id=user["id"],
+        name=user["name"],
+        experience_level=user.get("experience_level", "New"),
+        reps=len(sims),
+        average_score=round(sum(scores) / len(scores)) if scores else None,
+        latest_score=scores[-1] if scores else None,
+        improvement=_improvement(scores),
+        practice_seconds=sum(s.get("duration_seconds", 0) for s in sims),
+        last_practice_date=user.get("last_practice_date"),
+        weakest_skill=skills[-1]["category"] if skills else None,
+        level=user.get("level", 1),
+        xp=user.get("xp", 0),
+    )
+
+
+def _lapsed_names(members: list[TeamMember], days: int = 3) -> list[str]:
+    """Reps a manager should nudge: never practised, or idle for `days`+."""
+    out: list[str] = []
+    for member in members:
+        if not member.last_practice_date:
+            out.append(member.name)
+            continue
+        try:
+            if (date.today() - date.fromisoformat(member.last_practice_date)).days >= days:
+                out.append(member.name)
+        except ValueError:
+            continue
+    return out
+
+
 @router.get("/teams/{org}", response_model=TeamView)
 async def team_view(org: str, me: dict = Depends(current_user)):
     require_org(org, me)
@@ -98,68 +152,23 @@ async def team_view(org: str, me: dict = Depends(current_user)):
 
     members: list[TeamMember] = []
     all_sims: list[dict] = []
-    for u in users:
-        sims = await _completed({"user_id": u["id"]})
+    for user in users:
+        sims = await _completed({"user_id": user["id"]})
         all_sims.extend(sims)
-        scores = [int((s.get("evaluation") or {}).get("overall_score", 0)) for s in sims if s.get("evaluation")]
-        improvement = 0
-        if len(scores) >= 2:
-            half = max(1, len(scores) // 2)
-            improvement = round(sum(scores[half:]) / len(scores[half:])) - round(
-                sum(scores[:half]) / len(scores[:half])
-            )
-        skills = build_skills(sims)
-        members.append(
-            TeamMember(
-                user_id=u["id"],
-                name=u["name"],
-                experience_level=u.get("experience_level", "New"),
-                reps=len(sims),
-                average_score=round(sum(scores) / len(scores)) if scores else None,
-                latest_score=scores[-1] if scores else None,
-                improvement=improvement,
-                practice_seconds=sum(s.get("duration_seconds", 0) for s in sims),
-                last_practice_date=u.get("last_practice_date"),
-                weakest_skill=skills[-1]["category"] if skills else None,
-                level=u.get("level", 1),
-                xp=u.get("xp", 0),
-            )
-        )
+        members.append(_team_member(user, sims))
 
-    team_scores = [
-        int((s.get("evaluation") or {}).get("overall_score", 0)) for s in all_sims if s.get("evaluation")
-    ]
-    team_improvement = 0
-    if len(team_scores) >= 2:
-        half = max(1, len(team_scores) // 2)
-        team_improvement = round(sum(team_scores[half:]) / len(team_scores[half:])) - round(
-            sum(team_scores[:half]) / len(team_scores[:half])
-        )
-
-    gaps = [SkillStat(**s) for s in build_skills(all_sims)][::-1][:6]
+    team_scores = _scores(all_sims)
     assignments = (
         await db.assignments.find({"org": org}, {"_id": 0}).sort("created_at", -1).to_list(200)
     )
-    from datetime import date
-
-    lapsed: list[str] = []
-    for m in members:
-        if not m.last_practice_date:
-            lapsed.append(m.name)
-            continue
-        try:
-            if (date.today() - date.fromisoformat(m.last_practice_date)).days >= 3:
-                lapsed.append(m.name)
-        except ValueError:
-            pass
     return TeamView(
         org=org,
         members=sorted(members, key=lambda m: -m.reps),
         total_reps=len(all_sims),
         total_practice_seconds=sum(s.get("duration_seconds", 0) for s in all_sims),
         team_average=round(sum(team_scores) / len(team_scores)) if team_scores else None,
-        team_improvement=team_improvement,
-        skill_gaps=gaps,
+        team_improvement=_improvement(team_scores),
+        skill_gaps=[SkillStat(**s) for s in build_skills(all_sims)][::-1][:6],
         exercise_coverage=build_exercise_stats(all_sims),
         leaderboard=sorted(
             [m for m in members if m.average_score is not None],
@@ -167,7 +176,7 @@ async def team_view(org: str, me: dict = Depends(current_user)):
         )[:10],
         manager_hours_saved=round(len(all_sims) * MANAGER_MINUTES_PER_ROLEPLAY / 60, 1),
         assignments=[Assignment(**a) for a in assignments],
-        lapsed_members=lapsed,
+        lapsed_members=_lapsed_names(members),
     )
 
 

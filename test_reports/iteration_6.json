@@ -1,0 +1,141 @@
+{
+  "iteration": 6,
+  "mode": "retest",
+  "passed": 17,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Backend test suite: python -m pytest -q in /app/backend passes with no new failures",
+      "name": "pytest -q (16 files)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> '16 passed in 68.92s'. Includes 13 pre-existing files plus 2 new ones added this iteration (fourth-active-simulation-rejected, dashboard-and-team-view)."
+    },
+    {
+      "criterion": "No regression: start_simulation (_guard_new_simulation) / complete_simulation (_claim_for_grading/_grade) full call flow, and analytics build_readiness/earned_badges via dashboard",
+      "name": "test_tscheck_dashboard_and_team_view.py::test_dashboard_returns_readiness_shape",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: GET /api/users/{me}/dashboard -> 200, body.readiness.score in [0,100], readiness.label and readiness.recommendation non-empty strings, user.badges is a list. Confirms build_readiness/earned_badges refactor still emits the expected shape."
+    },
+    {
+      "criterion": "Regression: dashboard cross-user access remains rejected (require_self)",
+      "name": "test_tscheck_dashboard_and_team_view.py::test_dashboard_rejects_cross_user_access",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: GET /api/users/{other_id}/dashboard from a different signed-in user -> 403/404 (actual: rejected as expected)."
+    },
+    {
+      "criterion": "No regression: insights team_view (_team_member/_scores/_improvement/_lapsed_names) returns members, skill_gaps, leaderboard, manager_hours_saved, lapsed_members",
+      "name": "test_tscheck_dashboard_and_team_view.py::test_team_view_returns_expected_shape_for_org",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: GET /api/teams/Personal (own org) -> 200 with members[]/skill_gaps[]/leaderboard[]/manager_hours_saved(number)/lapsed_members[] all present and correctly typed."
+    },
+    {
+      "criterion": "Concurrency guard: a 4th concurrent active simulation for one user is rejected with 409; ending one frees a slot",
+      "name": "test_tscheck_fourth_active_simulation_rejected.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "NEW: started 3 active sims for one user -> all 200; 4th start -> 409 'You already have live simulations open...'; completed one of the three (turn+complete -> 200), then a subsequent start succeeded (200), confirming the slot was freed by _guard_new_simulation's active-count check post-refactor."
+    },
+    {
+      "criterion": "Concurrency + idempotency: two concurrent POST /complete -> one 200 + one 409; in-flight turn after end -> 409 and reply absent from transcript",
+      "name": "end-simulation-hard-stop (pytest: test_tscheck_end_simulation_hard_stop.py)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Re-run in this iteration's full suite pass: concurrent /complete pair -> [200,409]; concurrent in-flight /turns call -> 409; final transcript has exactly 1 rep line and 1 prospect line (the opening only), confirming _claim_for_grading/_grade survived the refactor."
+    },
+    {
+      "criterion": "Regression: Retry That Moment API (mode='moment', origin_score, single opening turn, original untouched, 404s on foreign id/bad index)",
+      "name": "test_tscheck_retry_that_moment.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Re-run in full suite pass: retry-moment -> mode='moment', origin_score==original overall_score, 1 prospect turn; retry completed independently with moment_improved bool; original sim transcript/score unchanged; foreign user -> 404; out-of-range miss_index -> 404."
+    },
+    {
+      "criterion": "Regression: Retry That Moment UI flow (retry-moment-0 -> moment-retry-banner -> typed reply -> End -> moment-retry-summary/verdict)",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name (reran-persisted): graded report with a miss -> moment-retry-banner -> retry sim -> moment-retry-summary with moment-retry-verdict shown; original sim unchanged. Only expected 401/409 console noise."
+    },
+    {
+      "criterion": "Regression: mic-check gate + skippable second time",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: gate blocks start until ready; skip enters call; second sim in same session skips gate. Only expected 401 probe."
+    },
+    {
+      "criterion": "Regression: mic-check test-voice uses ElevenLabs",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: POST /api/voice/speak -> 200 audio/*, voice-status becomes 'Ready \u2713'."
+    },
+    {
+      "criterion": "Regression: End Simulation hard stop (UI)",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: double end-simulation-button click during grading -> one 409 on duplicate in-flight call (expected) -> scorecard reached cleanly, single grading only."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard and history reachable after guest sign-in, no loop; only expected 401 probe."
+    },
+    {
+      "criterion": "Regression: email signup/login persistence",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: signup -> logout -> re-login persists session; wrong password rejected. 4 expected 401 probes only."
+    },
+    {
+      "criterion": "Regression: session survives without cookies",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard still visible after clearing cookies (bearer token fallback)."
+    },
+    {
+      "criterion": "Regression: demo launch reaches simulation",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: demo-launch-button (scrolled into view) -> simulation started."
+    },
+    {
+      "criterion": "Regression after frontend component extraction: no duplicate-key/max-update-depth/uncaught console errors across pages + live sim",
+      "name": "no-react-key-hook-regressions",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: browsed /, /dashboard, /training, /sample-report, /voice-cast, launched live sim (mic-check-skip), spacebar mic toggle responsive. No duplicate-key warnings, no 'Maximum update depth exceeded', no uncaught errors; only expected 401 probe."
+    },
+    {
+      "criterion": "Ancillary regressions retained from prior iterations (rebrand, sample report labeling, training coming-soon cards, voice cast preview)",
+      "name": "rebrand-no-vocalpitch / sample-report-clearly-labeled / training-library-coming-soon-cards / voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "All 4 re-run by name this iteration; all passed with only expected 401 console noise."
+    }
+  ],
+  "bugs": [],
+  "action_items": [],
+  "notes": [
+    "Retest mode: ran the full backend pytest suite first (16 passed after adding 2 new files), then re-ran all 13 existing named browser checks by name only (no script resent), per instructions.",
+    "This iteration's briefing shifted focus to backend refactor safety (start/complete_simulation, _scenario_from_custom, analytics, insights team_view) and concurrency guards. The refactor's UI-facing behaviors (retry-moment flow, end-simulation hard stop, mic-check, demo, auth) were already covered by iteration_5's persisted browser checks and re-passed unchanged.",
+    "Two NEW backend test files were added to close gaps the previous iteration's suite didn't explicitly cover: (1) test_tscheck_fourth_active_simulation_rejected.py for the '4th concurrent active simulation -> 409' criterion (_guard_new_simulation's active>=3 cap, confirmed in routers/simulations.py), and (2) test_tscheck_dashboard_and_team_view.py for the dashboard readiness shape and GET /api/teams/{org} shape criteria (build_readiness/earned_badges and team_view/_lapsed_names).",
+    "No new browser checks were needed: the retry-moment, end-simulation-hard-stop, mic-check, demo-launch and auth UI flows in the matrix map 1:1 onto already-named checks, re-run by name per retest-mode rules.",
+    "spec_deviations from the briefing (un-split Scorecard/SkillModule/BusinessSetup/Team, decorative index keys, bearer token in localStorage, anonymous 401 on /api/auth/me) remain accepted as intentional, not flagged as bugs.",
+    "Console noise across all checks was limited to the expected anonymous 401 probe on GET /api/auth/me and the expected 409s from the intentional double-click/concurrency hard-stop tests."
+  ]
+}

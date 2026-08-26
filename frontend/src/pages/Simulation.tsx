@@ -22,6 +22,7 @@ import { useMic, useProspectVoice } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
 import MicCheck, { audioAlreadyVerified } from "@/components/MicCheck";
 import WaveBars from "@/components/WaveBars";
+import TranscriptPanel from "@/components/TranscriptPanel";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -401,42 +402,13 @@ export default function SimulationPage() {
               </span>
             </div>
 
-            <div
-              ref={scrollRef}
-              className="max-h-[42vh] min-h-[220px] flex-1 space-y-3 overflow-y-auto px-5 py-4"
-              data-testid="transcript-live"
-            >
-              {turns.map((t, i) => (
-                <div
-                  key={`${i}-${t.speaker}-${t.at}`}
-                  className={cn(
-                    "max-w-[85%] rounded-lg px-3.5 py-2.5 text-[13.5px] leading-relaxed animate-rise",
-                    t.speaker === "prospect"
-                      ? "bg-slate-800/80 text-slate-100"
-                      : "ml-auto border border-slate-700 text-slate-300",
-                  )}
-                  data-testid={`turn-${t.speaker}-${i}`}
-                >
-                  <span className="mb-0.5 block text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    {t.speaker === "prospect" ? scenario.prospect_name : "You"}
-                  </span>
-                  {t.text}
-                </div>
-              ))}
-              {pendingRep ? (
-                <div className="ml-auto max-w-[85%] rounded-lg border border-slate-700 px-3.5 py-2.5 text-[13.5px] text-slate-400">
-                  <span className="mb-0.5 block text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-                    You
-                  </span>
-                  {pendingRep}
-                </div>
-              ) : null}
-              {mic.interim ? (
-                <div className="ml-auto max-w-[85%] px-3.5 text-[13px] italic text-slate-500">
-                  {mic.interim}
-                </div>
-              ) : null}
-            </div>
+            <TranscriptPanel
+              turns={turns}
+              prospectName={scenario.prospect_name}
+              pendingRep={pendingRep}
+              interim={mic.interim}
+              scrollRef={scrollRef}
+            />
 
             <WaveBars
               active={speaking || mic.listening}

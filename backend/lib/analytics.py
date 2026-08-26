@@ -1,4 +1,5 @@
 """Dashboard / progress aggregation over completed simulations."""
+from collections.abc import Callable
 from typing import Any
 
 from lib.catalog import (
@@ -100,27 +101,42 @@ def unlocked_difficulty(xp: int, sims: list[dict]) -> int:
     return max(2, unlocked)
 
 
+# Badge rules as data: one predicate per badge, so adding a badge is a one-line
+# change and each rule stays independently readable.
+BADGE_RULES: dict[str, Callable[[dict, list[dict], list[int]], bool]] = {
+    "first-flight": lambda user, sims, scores: bool(sims),
+    "committed": lambda user, sims, scores: len(sims) >= 5,
+    "relentless": lambda user, sims, scores: len(sims) >= 15,
+    "high-scorer": lambda user, sims, scores: any(s >= 80 for s in scores),
+    "expert-tier": lambda user, sims, scores: any(s["difficulty"] >= 5 for s in sims),
+    "streak-3": lambda user, sims, scores: (user.get("streak") or 0) >= 3,
+}
+
+# Category badges: badge id -> (category, minimum score in any single call)
+CATEGORY_BADGES: dict[str, tuple[str, int]] = {
+    "discovery-pro": ("Discovery", 85),
+    "objection-slayer": ("Objection Handling", 80),
+}
+
+
+def _best_category_score(sims: list[dict], category: str) -> int:
+    best = 0
+    for sim in sims:
+        for cs in (sim.get("evaluation") or {}).get("category_scores", []):
+            if cs["category"] == category:
+                best = max(best, int(cs["score"]))
+    return best
+
+
 def earned_badges(user: dict, sims: list[dict]) -> list[str]:
     ids: set[str] = set(user.get("badges") or [])
     scores = _completed_scores(sims)
-    if sims:
-        ids.add("first-flight")
-    if len(sims) >= 5:
-        ids.add("committed")
-    if len(sims) >= 15:
-        ids.add("relentless")
-    if any(s >= 80 for s in scores):
-        ids.add("high-scorer")
-    if any(s["difficulty"] >= 5 for s in sims):
-        ids.add("expert-tier")
-    if (user.get("streak") or 0) >= 3:
-        ids.add("streak-3")
-    for s in sims:
-        for cs in (s.get("evaluation") or {}).get("category_scores", []):
-            if cs["category"] == "Discovery" and cs["score"] >= 85:
-                ids.add("discovery-pro")
-            if cs["category"] == "Objection Handling" and cs["score"] >= 80:
-                ids.add("objection-slayer")
+    ids.update(bid for bid, rule in BADGE_RULES.items() if rule(user, sims, scores))
+    ids.update(
+        bid
+        for bid, (category, minimum) in CATEGORY_BADGES.items()
+        if _best_category_score(sims, category) >= minimum
+    )
     return sorted(ids)
 
 
@@ -188,11 +204,31 @@ def build_nudge(user: dict, sims: list[dict]) -> dict[str, Any]:
     }
 
 
-def build_readiness(skills: list[dict], sims: list[dict]) -> dict[str, Any]:
-    """Weighted 'can this rep talk to a real customer yet' score. Uncovered
-    competencies are not silently ignored — they cap the achievable score."""
+def _readiness_label(score: int, assessed: bool) -> str:
+    if not assessed:
+        return "Not assessed"
+    if score >= 75:
+        return "Customer ready"
+    if score >= 55:
+        return "Nearly ready"
+    return "Keep practising"
+
+
+def _readiness_recommendation(weakest: dict | None, assessed: bool) -> str:
+    if weakest:
+        return (
+            f"{weakest['category']} is your weakest weighted competency at "
+            f"{weakest['score']}/100 — practise it next."
+        )
+    if assessed:
+        return "Broaden your coverage: several weighted competencies have no score yet."
+    return "Complete your first simulation to generate a readiness score."
+
+
+def _readiness_categories(skills: list[dict]) -> tuple[list[dict], float, float]:
+    """Per-competency rows plus the weighted total and the weight actually covered."""
     by_cat = {s["category"]: s for s in skills}
-    cats = []
+    cats: list[dict] = []
     weighted_sum = 0.0
     covered_weight = 0.0
     for cat, weight in READINESS_WEIGHTS.items():
@@ -208,29 +244,19 @@ def build_readiness(skills: list[dict], sims: list[dict]) -> dict[str, Any]:
                 "attempts": stat["attempts"] if stat else 0,
             }
         )
+    return cats, weighted_sum, covered_weight
+
+
+def build_readiness(skills: list[dict], sims: list[dict]) -> dict[str, Any]:
+    """Weighted 'can this rep talk to a real customer yet' score. Uncovered
+    competencies are not silently ignored — they cap the achievable score."""
+    cats, weighted_sum, covered_weight = _readiness_categories(skills)
     # Unpractised competencies count as zero, so breadth matters as much as depth.
     score = round(weighted_sum) if sims else 0
     scored = [c for c in cats if c["attempts"]]
     weakest = min(scored, key=lambda c: c["score"]) if scored else None
-    label = (
-        "Not assessed"
-        if not sims
-        else "Customer ready"
-        if score >= 75
-        else "Nearly ready"
-        if score >= 55
-        else "Keep practising"
-    )
-    rec = ""
-    if weakest:
-        rec = (
-            f"{weakest['category']} is your weakest weighted competency at "
-            f"{weakest['score']}/100 — practise it next."
-        )
-    elif sims:
-        rec = "Broaden your coverage: several weighted competencies have no score yet."
-    else:
-        rec = "Complete your first simulation to generate a readiness score."
+    label = _readiness_label(score, bool(sims))
+    rec = _readiness_recommendation(weakest, bool(sims))
     return {
         "score": score,
         "label": label,
