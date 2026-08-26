@@ -94,3 +94,24 @@ Cockpit shows four explicit states: Your turn / Listening / Prospect thinking / 
 
 ## Mongo collections added
 `sales_profiles`, `custom_scenarios` (stores `hidden` + a snapshot of the profile).
+
+---
+
+# V3 — Skill gates, attempt comparison, team view, ElevenLabs
+
+- **Skill gates**: `users.trained_skills[]`. `POST /api/users/{id}/trained/{exercise_id}` is called
+  when the rep reaches the Prepare step of `/learn/:skill`; it unlocks that skill permanently.
+  Until then the Training library's "Skip training, start the call" button is disabled and the
+  exercise card shows no "Training complete" marker.
+- **Attempt comparison**: `GET /api/users/{id}/attempts/{exercise_id}` returns every graded attempt
+  with per-category scores, first→latest delta, most improved and still-weakest categories.
+  Rendered by `components/AttemptComparison.tsx` on the scorecard ("Versus your previous attempts")
+  and on Progress with an exercise picker. Needs 2+ attempts, otherwise shows a prompt.
+- **Team view** (`/team`): `GET /api/teams/{org}` aggregates every user sharing `users.org` —
+  member table (reps, avg, trend, weakest skill, last practice), shared skill gaps, leaderboard,
+  exercise coverage chart and manager hours saved (30 min per role-play displaced). Read-only preview.
+- **ElevenLabs**: `ELEVENLABS_API_KEY` is set in backend/.env. `/api/voice/status` reports
+  provider=elevenlabs, but `POST /api/voice/speak` returns 502 wrapping ElevenLabs' 401
+  `missing_permissions: text_to_speech` — the supplied key lacks the Text-to-Speech scope.
+  The frontend degrades to browser speech synthesis automatically, so voice never breaks.
+  Fix by enabling Text to Speech on the key (ElevenLabs → Profile → API Keys → edit scopes).

@@ -59,6 +59,7 @@ export interface UserProfile {
   streak: number;
   last_practice_date: string | null;
   badges: string[];
+  trained_skills: string[];
   created_at: string;
 }
 
@@ -320,4 +321,59 @@ export interface Dashboard {
   recent: SimulationSummary[];
   total_practice_seconds: number;
   badges: BadgeItem[];
+}
+
+export interface Attempt {
+  index: number;
+  simulation_id: string;
+  started_at: string;
+  difficulty: number;
+  difficulty_name: string;
+  mode: string;
+  prospect_name: string;
+  overall_score: number;
+  categories: Record<string, number>;
+  talk_ratio: number;
+  question_count: number;
+}
+
+export interface AttemptSeries {
+  exercise_id: string;
+  exercise_name: string;
+  attempts: Attempt[];
+  first_score: number | null;
+  latest_score: number | null;
+  best_score: number | null;
+  delta: number;
+  category_deltas: Record<string, number>;
+  most_improved: string | null;
+  still_weakest: string | null;
+}
+
+export interface TeamMember {
+  user_id: string;
+  name: string;
+  experience_level: string;
+  reps: number;
+  average_score: number | null;
+  latest_score: number | null;
+  improvement: number;
+  practice_seconds: number;
+  last_practice_date: string | null;
+  weakest_skill: string | null;
+  level: number;
+  xp: number;
+}
+
+export interface TeamView {
+  org: string;
+  members: TeamMember[];
+  total_reps: number;
+  total_practice_seconds: number;
+  team_average: number | null;
+  team_improvement: number;
+  skill_gaps: SkillStat[];
+  exercise_coverage: ExerciseStat[];
+  leaderboard: TeamMember[];
+  manager_hours_saved: number;
 }

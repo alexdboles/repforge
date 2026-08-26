@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getUserId } from "@/lib/profile";
 import type {
+  UserProfile,
   Dashboard as DashboardData,
   Difficulty,
   Exercise,
@@ -40,6 +41,12 @@ export default function Training() {
     queryFn: () => apiGet<ScenarioBrief[]>(`/exercises/${exerciseId}/scenarios`),
     retry: false,
   });
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => apiGet<UserProfile>(`/users/${userId}`),
+    enabled: Boolean(userId),
+    retry: false,
+  });
   const { data: dash } = useQuery({
     queryKey: ["dashboard", userId],
     queryFn: () => apiGet<DashboardData>(`/users/${userId}/dashboard`),
@@ -54,6 +61,11 @@ export default function Training() {
   const difficulty = difficulties?.find((d) => d.level === level);
   const brief = scenarios && scenarios.length ? scenarios[scenarioIdx % scenarios.length] : undefined;
   const unlocked = dash?.unlocked_difficulty ?? 2;
+  // Only treat a skill as locked once we actually know the rep's training record —
+  // otherwise the button flashes disabled while the profile is still loading.
+  const gateKnown = Boolean(user);
+  const trained = Boolean(user?.trained_skills?.includes(exerciseId));
+  const locked = gateKnown && !trained;
 
   useEffect(() => {
     setParams({ exercise: exerciseId, difficulty: String(level) }, { replace: true });
@@ -123,6 +135,15 @@ export default function Training() {
                     <p className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">
                       {ex.tagline}
                     </p>
+                    {user?.trained_skills?.includes(ex.id) ? (
+                      <div
+                        className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-700"
+                        data-testid={`exercise-trained-${ex.id}`}
+                      >
+                        <GraduationCap className="size-3" />
+                        Training complete
+                      </div>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {ex.skills.slice(0, 3).map((s) => (
                         <Badge key={s} variant="secondary" className="text-[10.5px]">
@@ -297,7 +318,7 @@ export default function Training() {
                   variant="outline"
                   className="mt-2 w-full font-semibold"
                   onClick={() => start.mutate()}
-                  disabled={start.isPending || !brief}
+                  disabled={start.isPending || !brief || locked}
                   data-testid="start-simulation-button"
                 >
                   {start.isPending ? (
@@ -313,7 +334,9 @@ export default function Training() {
                   )}
                 </Button>
                 <p className="mt-2.5 text-center text-[12px] text-muted-foreground">
-                  Your microphone is used only in your browser. Allow access when prompted.
+                  {locked
+                    ? "New skill: work through the training once and direct practice unlocks permanently."
+                    : "Skill unlocked — start the call directly, or re-read the training any time."}
                 </p>
               </div>
             </div>

@@ -27,6 +27,7 @@ import { formatDuration, getUserId, tagMeta } from "@/lib/profile";
 import type { Simulation } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { ScoreRing, SkillBar } from "@/components/Metrics";
+import AttemptComparison from "@/components/AttemptComparison";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -344,6 +345,17 @@ export default function Scorecard() {
                   </Link>
                 </div>
               </div>
+            </section>
+
+            <section className="mt-6" data-testid="scorecard-attempts">
+              <h2 className="mb-3 font-heading text-[17px] font-bold">
+                Versus your previous attempts
+              </h2>
+              <AttemptComparison
+                userId={userId}
+                exerciseId={sim.exercise_id}
+                currentSimId={sim.id}
+              />
             </section>
 
             <Tabs defaultValue="transcript" className="mt-6">

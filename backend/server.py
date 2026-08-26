@@ -58,7 +58,15 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
-from routers import curriculum, sales_profiles, simulations, training, users, voice  # noqa: E402
+from routers import (  # noqa: E402
+    curriculum,
+    insights,
+    sales_profiles,
+    simulations,
+    training,
+    users,
+    voice,
+)
 
 api_router.include_router(training.router)
 api_router.include_router(users.router)
@@ -66,6 +74,7 @@ api_router.include_router(simulations.router)
 api_router.include_router(curriculum.router)
 api_router.include_router(sales_profiles.router)
 api_router.include_router(voice.router)
+api_router.include_router(insights.router)
 
 # Include the router in the main app
 app.include_router(api_router)

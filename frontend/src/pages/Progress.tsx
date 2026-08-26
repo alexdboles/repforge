@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -19,11 +20,13 @@ import { formatDuration, getUserId, scoreTone } from "@/lib/profile";
 import type { Dashboard as DashboardData } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { EmptyState, SkillBar, StatCard } from "@/components/Metrics";
+import AttemptComparison from "@/components/AttemptComparison";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function Progress() {
   const userId = getUserId();
+  const [compareId, setCompareId] = useState<string | null>(null);
   const { data: d, isLoading } = useQuery({
     queryKey: ["dashboard", userId],
     queryFn: () => apiGet<DashboardData>(`/users/${userId}/dashboard`),
@@ -165,6 +168,41 @@ export default function Progress() {
                 </div>
               </section>
             </div>
+
+            <section className="mt-6 rounded-xl border border-border bg-card p-5" data-testid="progress-comparison">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-heading text-[17px] font-bold">Attempt comparison</h2>
+                  <p className="text-[12.5px] text-muted-foreground">
+                    Same skill, repeated. This is where improvement stops being a feeling.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2" data-testid="comparison-exercise-picker">
+                  {d.exercise_stats.map((e) => (
+                    <button
+                      key={e.exercise_id}
+                      type="button"
+                      onClick={() => setCompareId(e.exercise_id)}
+                      data-testid={`compare-${e.exercise_id}`}
+                      className={cn(
+                        "rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors",
+                        (compareId ?? d.exercise_stats[0]?.exercise_id) === e.exercise_id
+                          ? "bg-[#0F172A] text-white"
+                          : "bg-secondary text-slate-600",
+                      )}
+                    >
+                      {e.exercise_name} ({e.attempts})
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4">
+                <AttemptComparison
+                  userId={userId}
+                  exerciseId={compareId ?? d.exercise_stats[0]?.exercise_id ?? "cold-call"}
+                />
+              </div>
+            </section>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
               <section className="rounded-xl border border-border bg-card p-5">

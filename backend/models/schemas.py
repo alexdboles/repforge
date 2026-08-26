@@ -187,6 +187,7 @@ class UserProfile(BaseModel):
     streak: int = 0
     last_practice_date: Optional[str] = None
     badges: list[str] = []
+    trained_skills: list[str] = []
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -316,6 +317,34 @@ class SimulationSummary(BaseModel):
     turns: int = 0
 
 
+# ---------- attempt comparison ----------
+class Attempt(BaseModel):
+    index: int
+    simulation_id: str
+    started_at: datetime
+    difficulty: int
+    difficulty_name: str
+    mode: str
+    prospect_name: str
+    overall_score: int
+    categories: dict[str, int] = {}
+    talk_ratio: int = 0
+    question_count: int = 0
+
+
+class AttemptSeries(BaseModel):
+    exercise_id: str
+    exercise_name: str
+    attempts: list[Attempt] = []
+    first_score: Optional[int] = None
+    latest_score: Optional[int] = None
+    best_score: Optional[int] = None
+    delta: int = 0
+    category_deltas: dict[str, int] = {}
+    most_improved: Optional[str] = None
+    still_weakest: Optional[str] = None
+
+
 # ---------- dashboard / progress ----------
 class SkillStat(BaseModel):
     category: str
@@ -337,6 +366,35 @@ class ExerciseStat(BaseModel):
     attempts: int
     average: int
     best: int
+
+
+# ---------- team / manager view ----------
+class TeamMember(BaseModel):
+    user_id: str
+    name: str
+    experience_level: str
+    reps: int
+    average_score: Optional[int] = None
+    latest_score: Optional[int] = None
+    improvement: int = 0
+    practice_seconds: int = 0
+    last_practice_date: Optional[str] = None
+    weakest_skill: Optional[str] = None
+    level: int = 1
+    xp: int = 0
+
+
+class TeamView(BaseModel):
+    org: str
+    members: list[TeamMember] = []
+    total_reps: int = 0
+    total_practice_seconds: int = 0
+    team_average: Optional[int] = None
+    team_improvement: int = 0
+    skill_gaps: list[SkillStat] = []
+    exercise_coverage: list[ExerciseStat] = []
+    leaderboard: list[TeamMember] = []
+    manager_hours_saved: float = 0.0
 
 
 class Recommendation(BaseModel):

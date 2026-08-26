@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getUserId } from "@/lib/profile";
 import type {
+  UserProfile,
   Difficulty,
   Exercise,
   ScenarioBrief,
@@ -42,11 +43,24 @@ export default function SkillModule() {
   const { exerciseId = "cold-call" } = useParams();
   const userId = getUserId();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [step, setStep] = useState(0);
   const [level, setLevel] = useState(Number(params.get("difficulty") ?? 2) || 2);
   const [scenarioIdx, setScenarioIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
+
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => apiGet<UserProfile>(`/users/${userId}`),
+    enabled: Boolean(userId),
+    retry: false,
+  });
+  const markTrained = useMutation({
+    mutationFn: () => apiPost<{ trained_skills: string[] }>(`/users/${userId}/trained/${exerciseId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["user", userId] }),
+  });
+  const trained = Boolean(user?.trained_skills?.includes(exerciseId));
 
   const { data: mod, isLoading: loadingModule } = useQuery({
     queryKey: ["curriculum", exerciseId],
@@ -100,6 +114,8 @@ export default function SkillModule() {
   if (!userId) return <Navigate to="/" replace />;
 
   const goto = (i: number) => {
+    // Reaching the prep step is what unlocks this skill for direct practice later.
+    if (i >= 2 && !trained && !markTrained.isPending) markTrained.mutate();
     setStep(i);
     setParams({ difficulty: String(level) }, { replace: true });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -127,15 +143,22 @@ export default function SkillModule() {
               {mod?.promise ?? exercise?.tagline}
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => goto(2)}
-            data-testid="module-skip-to-call"
-            className="font-semibold"
-          >
-            Skip to the call
-            <ArrowRight className="size-4" />
-          </Button>
+          <div className="text-right">
+            <Button
+              variant="outline"
+              onClick={() => goto(2)}
+              data-testid="module-skip-to-call"
+              className="font-semibold"
+            >
+              {trained ? "Skip to the call" : "Jump to pre-call prep"}
+              <ArrowRight className="size-4" />
+            </Button>
+            <p className="mt-1.5 text-[11.5px] text-muted-foreground" data-testid="module-gate-status">
+              {trained
+                ? "Skill unlocked — you can start this call directly from the library"
+                : "First time on this skill: open the prep step to unlock direct practice"}
+            </p>
+          </div>
         </div>
 
         <nav className="mt-7 flex flex-wrap gap-2" data-testid="module-steps">
