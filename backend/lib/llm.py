@@ -38,7 +38,24 @@ def _chat(session_id: str, system_message: str) -> LlmChat:
     ).with_model(MODEL_PROVIDER, MODEL_NAME)
 
 
-def prospect_system_prompt(scenario: dict, exercise: dict, difficulty: dict) -> str:
+def memory_block(prior: str) -> str:
+    """What this character already told the rep in earlier calls of the same journey."""
+    if not prior:
+        return ""
+    return (
+        "PREVIOUS CONVERSATIONS WITH THIS SALESPERSON — you remember all of it:\n"
+        f"{prior}\n\n"
+        "MEMORY RULES:\n"
+        "- Reference these earlier conversations naturally when relevant.\n"
+        "- If they ask you something you already told them, say so plainly and a little "
+        'impatiently (e.g. "I told you that when you called me"). Never pretend it is new.\n'
+        "- What you already volunteered stays known. What they never earned is still hidden.\n\n"
+    )
+
+
+def prospect_system_prompt(
+    scenario: dict, exercise: dict, difficulty: dict, memory: str = ""
+) -> str:
     return f"""You ARE {scenario['prospect_name']}, {scenario['prospect_role']} at {scenario['company']} ({scenario['company_size']}, {scenario['industry']}). You are NOT an AI assistant. You are a real human prospect on a live sales conversation.
 
 The person speaking to you is a salesperson selling {scenario['product']}. The exercise context is: {exercise['name']} — {exercise['description']}
@@ -55,7 +72,7 @@ OBJECTIONS you may naturally raise when it fits: {'; '.join(scenario['objections
 
 DIFFICULTY: Level {difficulty['level']} — {difficulty['name']}. Behave exactly like this: {difficulty['behavior']}
 
-HARD RULES:
+{memory}HARD RULES:
 - Stay 100% in character. NEVER coach, evaluate, hint, or mention that this is training or that you are an AI. No meta-commentary, ever.
 - Speak like a real person on a call: 1-3 sentences, contractions, occasional hesitation ("uh", "look", "honestly"), sometimes an incomplete thought. NEVER use bullet points, markdown, stage directions, or asterisks.
 - React to quality. Vague claims → push back or ask "what does that actually mean?". Premature pitching → get impatient, look at the clock, or disengage. Genuinely insightful questions → open up a little more and get more engaged.
@@ -63,7 +80,9 @@ HARD RULES:
 - At higher difficulty you may interrupt, deflect, change subject or answer only part of a question.
 - If the salesperson performs excellently and asks for a clear, specific commitment, you may agree — but only if they have earned it.
 - If the salesperson is rambling or pitching without discovery, you may try to end the call.
-- Output ONLY your spoken words. Nothing else."""
+- Output ONLY your spoken words. Nothing else.
+- Not every conversation must end well. If the salesperson pitches without listening,
+  argues, or wastes your time, you are entitled to stay unconvinced, decline, or end it."""
 
 
 async def prospect_turn(
@@ -73,9 +92,11 @@ async def prospect_turn(
     difficulty: dict,
     transcript: list[dict],
     rep_line: str,
+    prior: str = "",
 ) -> str:
     chat = _chat(
-        f"sim-{simulation_id}", prospect_system_prompt(scenario, exercise, difficulty)
+        f"sim-{simulation_id}",
+        prospect_system_prompt(scenario, exercise, difficulty, memory_block(prior)),
     )
     history = "\n".join(
         f"{'SALESPERSON' if t['speaker'] == 'rep' else 'YOU'}: {t['text']}"
@@ -91,11 +112,15 @@ async def prospect_turn(
 
 
 async def prospect_opening(
-    simulation_id: str, scenario: dict, exercise: dict, difficulty: dict
+    simulation_id: str,
+    scenario: dict,
+    exercise: dict,
+    difficulty: dict,
+    prior: str = "",
 ) -> str:
     chat = _chat(
         f"sim-{simulation_id}-open",
-        prospect_system_prompt(scenario, exercise, difficulty),
+        prospect_system_prompt(scenario, exercise, difficulty, memory_block(prior)),
     )
     prompt = (
         "The conversation is just beginning and the salesperson has reached you. "
@@ -143,6 +168,7 @@ async def evaluate_conversation(
     duration_seconds: int,
     focus: list[str] | None = None,
     principles: list[str] | None = None,
+    prior: str = "",
 ) -> dict[str, Any]:
     chat = _chat(f"eval-{simulation_id}", EVAL_SYSTEM)
     convo = "\n".join(
@@ -157,7 +183,7 @@ DIFFICULTY: Level {difficulty['level']} ({difficulty['name']}) — {difficulty['
 PROSPECT: {scenario['prospect_name']}, {scenario['prospect_role']} at {scenario['company']}
 REP'S OBJECTIVE: {scenario['objective']}
 HIDDEN INFORMATION the rep could have discovered: {scenario['hidden']}
-CALL DURATION: {duration_seconds} seconds, {len(transcript)} turns.
+{("WHAT THIS PROSPECT ALREADY TOLD THE REP IN EARLIER CALLS (grade Relationship Memory: did they use it, or re-ask things they were already told?):" + chr(10) + prior + chr(10)) if prior else ""}CALL DURATION: {duration_seconds} seconds, {len(transcript)} turns.
 
 TRANSCRIPT:
 {convo}
@@ -378,3 +404,44 @@ def uuid_hint() -> str:
     import uuid as _uuid
 
     return str(_uuid.uuid4())[:8]
+
+
+HINT_SYSTEM = """You are a live sales coach sitting beside a trainee during a practice call. You never speak to the prospect. You tell the trainee what to accomplish next in the conversation, based on what the prospect just said and where the conversation currently is.
+
+Be concrete and short. Name the stage of the conversation, the immediate goal, and one example of how they could phrase it. Never invent facts about the prospect. Never tell the trainee what the prospect is secretly thinking or hiding. Return ONLY valid JSON."""
+
+
+async def coaching_hint(
+    simulation_id: str,
+    scenario: dict,
+    exercise: dict,
+    difficulty: dict,
+    transcript: list[dict],
+    principles: list[str] | None = None,
+) -> dict[str, Any]:
+    chat = _chat(f"hint-{simulation_id}-{len(transcript)}", HINT_SYSTEM)
+    convo = "\n".join(
+        f"{'SALESPERSON' if t['speaker'] == 'rep' else scenario['prospect_name'].upper()}: {t['text']}"
+        for t in transcript[-8:]
+    )
+    taught = ", ".join(principles or []) or "consultative selling fundamentals"
+    prompt = f"""EXERCISE: {exercise['name']} — objective: {scenario['objective']}
+PRINCIPLES THE TRAINEE WAS TAUGHT: {taught}
+DIFFICULTY: Level {difficulty['level']} ({difficulty['name']})
+
+CONVERSATION SO FAR:
+{convo or "(the call has just connected)"}
+
+Return JSON:
+{{"stage": "2-4 word name for where the conversation is (e.g. 'Opening', 'Uncovering impact')",
+ "goal": "one sentence telling the trainee what to accomplish with their next turn",
+ "example": "one sentence they could actually say, in natural spoken language",
+ "avoid": "one short warning about the most likely mistake right now"}}"""
+    raw = await chat.send_message(UserMessage(text=prompt))
+    data = _parse_json(raw)
+    return {
+        "stage": str(data.get("stage") or "Next move"),
+        "goal": str(data.get("goal") or ""),
+        "example": str(data.get("example") or ""),
+        "avoid": str(data.get("avoid") or ""),
+    }

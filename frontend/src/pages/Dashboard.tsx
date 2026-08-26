@@ -98,6 +98,58 @@ export default function Dashboard() {
           </div>
         ) : null}
 
+        {d?.readiness ? (
+          <section
+            className="mt-6 grid gap-6 rounded-xl border border-border bg-card p-6 lg:grid-cols-[auto_1fr]"
+            data-testid="readiness-card"
+          >
+            <div className="flex flex-col items-center">
+              <ScoreRing score={d.readiness.score} label="Readiness" testid="readiness-score" />
+              <span className="mt-2 rounded-full bg-secondary px-3 py-1 text-[12px] font-semibold" data-testid="readiness-label">
+                {d.readiness.label}
+              </span>
+            </div>
+            <div>
+              <h2 className="font-heading text-[19px] font-bold">Customer readiness</h2>
+              <p className="mt-1 text-[13.5px] text-muted-foreground">
+                Weighted across the competencies that actually decide a real conversation — not an
+                average, and not XP. {d.readiness.covered} of {d.readiness.total_weighted} weighted
+                competencies have a score so far.
+              </p>
+              <div className="mt-4 grid gap-x-6 gap-y-1 sm:grid-cols-2" data-testid="readiness-breakdown">
+                {d.readiness.categories.map((c) => (
+                  <div
+                    key={c.category}
+                    className="flex items-center gap-3 py-1"
+                    data-testid={`readiness-${c.category.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    <span className="w-[150px] shrink-0 truncate text-[13px]">{c.category}</span>
+                    <span className="font-mono text-[10.5px] text-muted-foreground">{c.weight}%</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className={cn("h-full rounded-full", c.attempts ? "bg-primary" : "bg-slate-300")}
+                        style={{ width: `${c.score}%` }}
+                      />
+                    </div>
+                    <span
+                      className={cn(
+                        "w-8 text-right font-mono text-[12.5px] font-semibold",
+                        c.attempts ? scoreTone(c.score) : "text-muted-foreground",
+                      )}
+                    >
+                      {c.attempts ? c.score : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-md bg-secondary p-3.5 text-[13px]" data-testid="readiness-recommendation">
+                <span className="font-semibold">Biggest opportunity: </span>
+                {d.readiness.recommendation}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         {d?.assignments?.length ? (
           <section className="mt-6 rounded-xl border border-border bg-card p-5" data-testid="assigned-training">
             <div className="flex items-center gap-2">

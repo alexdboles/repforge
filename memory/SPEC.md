@@ -136,3 +136,30 @@ Cockpit shows four explicit states: Your turn / Listening / Prospect thinking / 
 - **Same-prospect retry**: `POST /api/simulations/{id}/retry` clones the scenario, difficulty and mode
   (and voice persona) into a fresh simulation with a new opening line, so attempt comparison is
   apples to apples. Scorecard button: "Run this exact prospect again"; "New scenario" is separate.
+
+---
+
+# V5 — Staged learning path, prospect journeys, memory, hints, readiness
+
+- **9 exercises** (added `networking`, with a full curriculum module) organised into 6 stages via
+  `GET /api/stages`: foundations → starting conversations → understanding → resistance →
+  real-world → commitment. Guidance only; nothing hard-locked beyond the XP difficulty tiers.
+- **Prospect journeys** (`backend/lib/journeys.py`): 3 recurring characters — Marcus Webb (cold
+  prospect: cold-call → objection-handling → discovery → closing), Sarah Lindqvist (networking →
+  30-second commercial → discovery → in-person → closing), David Okonjo (warm walk-in: in-person →
+  value statement → objection-handling → closing). One hidden dossier per character, revealed only
+  through questioning. `GET /api/users/{id}/journeys` returns per-stage completion + best score;
+  `POST /api/simulations` accepts `journey_id` with `mode: "journey"`.
+- **Memory continuity**: on a journey stage, prior completed transcripts for that (user, journey)
+  are digested into `simulation.prior_context` and injected into the prospect prompt with rules to
+  call out re-asked questions ("I already told you that when you rang me") — verified live. The same
+  digest goes to the evaluator, and **Relationship Memory** is now a scored category.
+- **Live coaching rail**: `GET /api/simulations/{id}/hint` returns {stage, goal, example, avoid} and
+  409s above Level 2. Level 1 shows example wording outright; Level 2 hides it behind
+  "Show example wording". The rail renders beside the transcript and refreshes each prospect turn.
+- **Customer Readiness Score**: weighted (Discovery 20, Listening/Objections/Value 15 each, then
+  Closing, Next Steps, Opening, Rapport, Clarity, Confidence, Relationship Memory) — unpractised
+  competencies count as zero so breadth matters. Shown on the dashboard with per-category weights
+  and the biggest opportunity.
+- **Voice realism**: switched to `eleven_multilingual_v2` with per-difficulty stability/style curves
+  and light punctuation shaping for breaths.

@@ -3,6 +3,7 @@ from typing import Any
 
 from lib.catalog import (
     BADGES,
+    READINESS_WEIGHTS,
     DIFFICULTIES,
     EXERCISES,
     difficulty_by_level,
@@ -187,6 +188,60 @@ def build_nudge(user: dict, sims: list[dict]) -> dict[str, Any]:
     }
 
 
+def build_readiness(skills: list[dict], sims: list[dict]) -> dict[str, Any]:
+    """Weighted 'can this rep talk to a real customer yet' score. Uncovered
+    competencies are not silently ignored — they cap the achievable score."""
+    by_cat = {s["category"]: s for s in skills}
+    cats = []
+    weighted_sum = 0.0
+    covered_weight = 0.0
+    for cat, weight in READINESS_WEIGHTS.items():
+        stat = by_cat.get(cat)
+        if stat:
+            covered_weight += weight
+            weighted_sum += stat["average"] * weight
+        cats.append(
+            {
+                "category": cat,
+                "score": stat["average"] if stat else 0,
+                "weight": round(weight * 100),
+                "attempts": stat["attempts"] if stat else 0,
+            }
+        )
+    # Unpractised competencies count as zero, so breadth matters as much as depth.
+    score = round(weighted_sum) if sims else 0
+    scored = [c for c in cats if c["attempts"]]
+    weakest = min(scored, key=lambda c: c["score"]) if scored else None
+    label = (
+        "Not assessed"
+        if not sims
+        else "Customer ready"
+        if score >= 75
+        else "Nearly ready"
+        if score >= 55
+        else "Keep practising"
+    )
+    rec = ""
+    if weakest:
+        rec = (
+            f"{weakest['category']} is your weakest weighted competency at "
+            f"{weakest['score']}/100 — practise it next."
+        )
+    elif sims:
+        rec = "Broaden your coverage: several weighted competencies have no score yet."
+    else:
+        rec = "Complete your first simulation to generate a readiness score."
+    return {
+        "score": score,
+        "label": label,
+        "categories": cats,
+        "biggest_opportunity": weakest["category"] if weakest else None,
+        "recommendation": rec,
+        "covered": len(scored),
+        "total_weighted": len(READINESS_WEIGHTS),
+    }
+
+
 def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
     """sims: completed simulations, oldest first."""
     scores = _completed_scores(sims)
@@ -228,6 +283,7 @@ def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
         "total_practice_seconds": sum(s.get("duration_seconds", 0) for s in sims),
         "badges": badge_list(earned),
         "nudge": build_nudge(user, sims),
+        "readiness": build_readiness(skills, sims),
     }
 
 

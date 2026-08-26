@@ -14,10 +14,18 @@ from lib.catalog import (
 )
 from lib.curriculum import focus_categories, graded_principles
 from lib.dates import today_iso
+from lib.journeys import journey_by_id, scenario_for_stage
 from lib.db import db
-from lib.llm import LlmUnavailable, evaluate_conversation, prospect_opening, prospect_turn
+from lib.llm import (
+    LlmUnavailable,
+    coaching_hint,
+    evaluate_conversation,
+    prospect_opening,
+    prospect_turn,
+)
 from models.schemas import (
     Evaluation,
+    Hint,
     Simulation,
     SimulationStart,
     SimulationSummary,
@@ -86,7 +94,17 @@ async def start_simulation(payload: SimulationStart):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if payload.custom_scenario_id:
+    if payload.journey_id:
+        journey = journey_by_id(payload.journey_id)
+        if not journey:
+            raise HTTPException(status_code=404, detail="Unknown journey")
+        scenario = scenario_for_stage(journey, payload.exercise_id)
+        if not scenario:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{journey['character']} has no {exercise['name']} stage in this journey",
+            )
+    elif payload.custom_scenario_id:
         custom = await db.custom_scenarios.find_one(
             {"id": payload.custom_scenario_id}, {"_id": 0}
         )
@@ -112,8 +130,11 @@ async def start_simulation(payload: SimulationStart):
         mode=payload.mode,
         voice_persona=voice_persona_for(scenario),
     )
+    prior = await journey_memory(payload.user_id, scenario.get("journey_id"))
+    sim.journey_id = scenario.get("journey_id")
+    sim.prior_context = prior
     try:
-        opening = await prospect_opening(sim.id, scenario, exercise, difficulty)
+        opening = await prospect_opening(sim.id, scenario, exercise, difficulty, prior)
         sim.transcript = [TranscriptTurn(speaker="prospect", text=opening, at=0.0)]
     except LlmUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -141,7 +162,13 @@ async def add_turn(sim_id: str, payload: TurnRequest):
     transcript = sim.get("transcript") or []
     try:
         reply = await prospect_turn(
-            sim_id, sim["scenario"], exercise, difficulty, transcript, text
+            sim_id,
+            sim["scenario"],
+            exercise,
+            difficulty,
+            transcript,
+            text,
+            sim.get("prior_context") or "",
         )
     except LlmUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -188,6 +215,7 @@ async def complete_simulation(sim_id: str):
             duration,
             focus=focus_categories(sim["exercise_id"]),
             principles=graded_principles(sim["exercise_id"]),
+            prior=sim.get("prior_context") or "",
         )
         evaluation = Evaluation(**raw)
     except LlmUnavailable as exc:
@@ -345,3 +373,56 @@ def _scenario_from_custom(custom: dict) -> dict:
         "mood": custom.get("mood", ""),
         "objections": custom.get("objections", []),
     }
+
+
+async def journey_memory(user_id: str, journey_id: str | None) -> str:
+    """Digest of what this character actually said to this rep in earlier stages."""
+    if not journey_id:
+        return ""
+    sims = (
+        await db.simulations.find(
+            {"user_id": user_id, "journey_id": journey_id, "status": "completed"},
+            {"_id": 0},
+        )
+        .sort("started_at", 1)
+        .to_list(6)
+    )
+    if not sims:
+        return ""
+    chunks: list[str] = []
+    for s in sims:
+        lines = [
+            f"  {'Salesperson' if t['speaker'] == 'rep' else 'You'}: {t['text']}"
+            for t in (s.get("transcript") or [])[:14]
+        ]
+        chunks.append(f"- {s['exercise_name']} ({s['difficulty_name']}):\n" + "\n".join(lines))
+    return "\n".join(chunks)
+
+
+@router.get("/simulations/{sim_id}/hint", response_model=Hint)
+async def get_hint(sim_id: str):
+    """Live coaching rail — only offered on the two teaching difficulties."""
+    sim = await _load(sim_id)
+    if sim["difficulty"] > 2:
+        raise HTTPException(
+            status_code=409,
+            detail="Live hints are only available on Beginner and Developing levels.",
+        )
+    exercise = exercise_by_id(sim["exercise_id"])
+    difficulty = difficulty_by_level(sim["difficulty"])
+    try:
+        data = await coaching_hint(
+            sim_id,
+            sim["scenario"],
+            exercise,
+            difficulty,
+            sim.get("transcript") or [],
+            graded_principles(sim["exercise_id"]),
+        )
+    except LlmUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("hint failed")
+        raise HTTPException(status_code=502, detail=f"Coach unavailable: {exc}") from exc
+    # Level 1 shows the wording outright; Level 2 keeps it behind a reveal.
+    return Hint(**data, reveal_example=sim["difficulty"] == 1)

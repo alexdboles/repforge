@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Compass,
   Loader2,
   Mic,
   MicOff,
@@ -15,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { formatDuration, getUserId } from "@/lib/profile";
+import type { Hint } from "@/lib/types";
 import type { Simulation, TranscriptTurn, TurnResponse } from "@/lib/types";
 import { useMic, useProspectVoice } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
@@ -50,6 +52,9 @@ export default function SimulationPage() {
   const [hydrated, setHydrated] = useState(false);
   const [pendingSpeak, setPendingSpeak] = useState<string | null>(null);
   const [turnError, setTurnError] = useState<string | null>(null);
+  const [showExample, setShowExample] = useState(false);
+  // Hard session boundary: once true, nothing may reach the transcript or the voice layer.
+  const [ended, setEnded] = useState(false);
   const [failedLine, setFailedLine] = useState<string | null>(null);
   const openedRef = useRef(false);
   const voice = useProspectVoice(sim?.voice_persona ?? "default", sim?.difficulty ?? 2);
@@ -59,6 +64,7 @@ export default function SimulationPage() {
     mutationFn: (text: string) =>
       apiPost<TurnResponse>(`/simulations/${id}/turns`, { text, at: seconds }),
     onSuccess: (res, text) => {
+      if (ended) return; // late reply after End Simulation — discard entirely
       setPendingRep(null);
       setTurnError(null);
       setFailedLine(null);
@@ -86,7 +92,7 @@ export default function SimulationPage() {
   const send = useCallback(
     (text: string) => {
       const clean = text.trim();
-      if (!clean || turnMutation.isPending) return;
+      if (!clean || turnMutation.isPending || ended) return;
       setPendingRep(clean);
       setTurnError(null);
       turnMutation.mutate(clean);
@@ -101,12 +107,25 @@ export default function SimulationPage() {
     if (!pendingSpeak) return;
     const line = pendingSpeak;
     setPendingSpeak(null);
-    if (muted) return;
+    if (muted || ended) return;
     mic.stop();
     voice.speak(line, () => {
       if (micWanted.current) mic.start();
     });
   }, [pendingSpeak, muted, mic, voice]);
+
+  const coachingOn = Boolean(sim && sim.difficulty <= 2);
+  const { data: hint, isFetching: hintLoading } = useQuery({
+    queryKey: ["hint", id, turns.length],
+    queryFn: () => apiGet<Hint>(`/simulations/${id}/hint`),
+    enabled: coachingOn && turns.length > 0 && !turnMutation.isPending && !ended,
+    retry: false,
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    setShowExample(false);
+  }, [turns.length]);
 
   const complete = useMutation({
     mutationFn: () => apiPost<Simulation>(`/simulations/${id}/complete`),
@@ -244,7 +263,19 @@ export default function SimulationPage() {
               className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300"
               data-testid="simulation-mode"
             >
-              {sim.mode === "business" ? "My business" : "Guided"}
+              {sim.mode === "business"
+                ? "My business"
+                : sim.mode === "journey"
+                  ? "Journey"
+                  : "Guided"}
+            </span>
+          ) : null}
+          {sim?.prior_context ? (
+            <span
+              className="rounded-full bg-violet-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-violet-300"
+              data-testid="memory-badge"
+            >
+              Remembers your earlier calls
             </span>
           ) : null}
           <span className="text-[11px] text-slate-500" data-testid="voice-provider">
@@ -297,7 +328,8 @@ export default function SimulationPage() {
             </div>
           </section>
 
-          <section className="mt-6 flex flex-1 flex-col rounded-xl border border-[#1E293B] bg-[#0B1220]">
+          <div className={cn("mt-6 grid flex-1 gap-4", coachingOn && "lg:grid-cols-[1fr_320px]")}>
+          <section className="flex flex-1 flex-col rounded-xl border border-[#1E293B] bg-[#0B1220]">
             <div className="flex items-center justify-between border-b border-[#1E293B] px-5 py-3">
               <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Conversation
@@ -407,11 +439,22 @@ export default function SimulationPage() {
                   variant="destructive"
                   size="lg"
                   className="ml-auto font-semibold"
-                  onClick={() => complete.mutate()}
-                  disabled={complete.isPending}
+                  onClick={() => {
+                    // Terminate the live session first, then analyse the frozen transcript.
+                    setEnded(true);
+                    micWanted.current = false;
+                    mic.stop();
+                    voice.silence();
+                    turnMutation.reset();
+                    setPendingRep(null);
+                    setPendingSpeak(null);
+                    setTurnError(null);
+                    complete.mutate();
+                  }}
+                  disabled={complete.isPending || ended}
                   data-testid="end-simulation-button"
                 >
-                  {complete.isPending ? (
+                  {ended || complete.isPending ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
                       Grading your call…
@@ -485,20 +528,88 @@ export default function SimulationPage() {
               )}
             </div>
           </section>
+
+          {coachingOn ? (
+            <aside
+              className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-5"
+              data-testid="coaching-rail"
+            >
+              <div className="flex items-center gap-2">
+                <Compass className="size-4 text-sky-400" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-300">
+                  Live coaching · Level {sim.difficulty}
+                </span>
+              </div>
+              {hintLoading && !hint ? (
+                <div className="mt-4 space-y-2" data-testid="coaching-loading">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-3 animate-pulse rounded bg-slate-700/60" />
+                  ))}
+                </div>
+              ) : hint ? (
+                <div className="mt-4">
+                  <div className="text-[12px] font-semibold text-slate-400" data-testid="hint-stage">
+                    {hint.stage}
+                  </div>
+                  <p className="mt-1.5 text-[14px] font-medium leading-relaxed" data-testid="hint-goal">
+                    {hint.goal}
+                  </p>
+                  {hint.reveal_example || showExample ? (
+                    <p
+                      className="mt-3 rounded-md bg-slate-900/70 p-3 text-[13px] italic leading-relaxed text-sky-200"
+                      data-testid="hint-example"
+                    >
+                      “{hint.example}”
+                    </p>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={() => setShowExample(true)}
+                      data-testid="hint-reveal-example"
+                    >
+                      Show example wording
+                    </Button>
+                  )}
+                  {hint.avoid ? (
+                    <p className="mt-3 border-t border-slate-700/70 pt-3 text-[12.5px] text-amber-300" data-testid="hint-avoid">
+                      Watch out: {hint.avoid}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-4 text-[13px] text-slate-400" data-testid="coaching-idle">
+                  Say something to {scenario.prospect_name.split(" ")[0]} and your next coaching step
+                  appears here.
+                </p>
+              )}
+              <p className="mt-5 border-t border-slate-700/70 pt-3 text-[11.5px] leading-relaxed text-slate-500">
+                Coaching is only available on Levels 1 and 2. From Level 3 the wheels come off — you
+                run the conversation yourself.
+              </p>
+            </aside>
+          ) : null}
+          </div>
         </div>
       )}
 
-      {complete.isPending ? (
+      {ended || complete.isPending ? (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-[#090D16]/90 backdrop-blur-sm"
           data-testid="grading-overlay"
         >
           <div className="text-center">
             <Loader2 className="mx-auto size-7 animate-spin text-sky-400" />
-            <h2 className="mt-4 font-heading text-[20px] font-bold">Analysing your conversation</h2>
-            <p className="mt-2 text-[13.5px] text-slate-400">
-              Scoring 14 competencies against what you actually said.
-            </p>
+            <h2 className="mt-4 font-heading text-[20px] font-bold">Simulation complete</h2>
+            <p className="mt-1.5 text-[14px] text-slate-300">Analysing your performance…</p>
+            <ul className="mx-auto mt-5 space-y-1.5 text-left text-[13px] text-slate-400">
+              <li>· Conversation locked — microphone and prospect disconnected</li>
+              <li>· Processing transcript</li>
+              <li>· Evaluating discovery, listening and objection handling</li>
+              <li>· Identifying coaching opportunities</li>
+              <li>· Building your scorecard</li>
+            </ul>
           </div>
         </div>
       ) : null}

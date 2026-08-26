@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { getUserId } from "@/lib/profile";
 import type {
+  LearningStage,
   UserProfile,
   Dashboard as DashboardData,
   Difficulty,
@@ -14,8 +15,8 @@ import type {
   Simulation,
 } from "@/lib/types";
 import AppShell from "@/components/AppShell";
+import Journeys from "@/components/Journeys";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export default function Training() {
@@ -39,6 +40,11 @@ export default function Training() {
   const { data: scenarios, isLoading: loadingScenarios } = useQuery({
     queryKey: ["scenarios", exerciseId],
     queryFn: () => apiGet<ScenarioBrief[]>(`/exercises/${exerciseId}/scenarios`),
+    retry: false,
+  });
+  const { data: stages } = useQuery({
+    queryKey: ["stages"],
+    queryFn: () => apiGet<LearningStage[]>("/stages"),
     retry: false,
   });
   const { data: user } = useQuery({
@@ -102,60 +108,93 @@ export default function Training() {
           scenario information is deliberately withheld — you have to earn it in conversation.
         </p>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
+        <section className="mt-8" data-testid="journeys-section">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-[19px] font-extrabold">Prospect journeys</h2>
+              <p className="mt-1 max-w-2xl text-[13.5px] text-muted-foreground">
+                Recurring characters across several exercises. They remember what you discussed last
+                time — and they will tell you if you ask something twice.
+              </p>
+            </div>
+            <span className="text-[12.5px] text-muted-foreground">
+              Runs at Level {level} · {difficulty?.name}
+            </span>
+          </div>
+          <div className="mt-4">
+            <Journeys difficulty={level} />
+          </div>
+        </section>
+
+        <h2 className="mt-10 font-heading text-[19px] font-extrabold">Skill library</h2>
+        <p className="mt-1 text-[13.5px] text-muted-foreground">
+          Follow the recommended order — each stage builds on the one before it.
+        </p>
+
+        <div className="mt-4 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
           <div>
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              1 · Choose exercise
+              1 · Choose a skill
             </h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="exercise-grid">
-              {(exercises ?? []).map((ex) => {
-                const active = ex.id === exerciseId;
-                return (
-                  <button
-                    key={ex.id}
-                    type="button"
-                    onClick={() => {
-                      setExerciseId(ex.id);
-                      setScenarioIdx(0);
-                    }}
-                    data-testid={`exercise-card-${ex.id}`}
-                    className={cn(
-                      "rounded-lg border p-4 text-left transition-colors",
-                      active
-                        ? "border-primary bg-accent"
-                        : "border-border bg-card hover:border-slate-300",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-heading text-[15.5px] font-bold">{ex.name}</span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        ~{ex.duration_min}m
-                      </span>
+            <div className="mt-3 space-y-6" data-testid="exercise-grid">
+              {(stages ?? []).map((st) => (
+                <div key={st.id} data-testid={`stage-${st.id}`}>
+                  <div className="flex items-baseline gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#0F172A] font-mono text-[11px] font-bold text-white">
+                      {st.order}
+                    </span>
+                    <div>
+                      <div className="font-heading text-[15px] font-bold">{st.name}</div>
+                      <p className="text-[12.5px] text-muted-foreground">{st.goal}</p>
                     </div>
-                    <p className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">
-                      {ex.tagline}
-                    </p>
-                    {user?.trained_skills?.includes(ex.id) ? (
-                      <div
-                        className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-700"
-                        data-testid={`exercise-trained-${ex.id}`}
-                      >
-                        <GraduationCap className="size-3" />
-                        Training complete
-                      </div>
-                    ) : null}
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {ex.skills.slice(0, 3).map((s) => (
-                        <Badge key={s} variant="secondary" className="text-[10.5px]">
-                          {s}
-                        </Badge>
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
-              {!exercises
-                ? Array.from({ length: 4 }).map((_, i) => (
+                  </div>
+                  <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+                    {st.exercise_ids.map((eid) => {
+                      const ex = exercises?.find((e) => e.id === eid);
+                      if (!ex) return null;
+                      const active = ex.id === exerciseId;
+                      return (
+                        <button
+                          key={ex.id}
+                          type="button"
+                          onClick={() => {
+                            setExerciseId(ex.id);
+                            setScenarioIdx(0);
+                          }}
+                          data-testid={`exercise-card-${ex.id}`}
+                          className={cn(
+                            "rounded-lg border p-4 text-left transition-colors",
+                            active
+                              ? "border-primary bg-accent"
+                              : "border-border bg-card hover:border-slate-300",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-heading text-[15px] font-bold">{ex.name}</span>
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              ~{ex.duration_min}m
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">
+                            {ex.tagline}
+                          </p>
+                          {user?.trained_skills?.includes(ex.id) ? (
+                            <div
+                              className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-700"
+                              data-testid={`exercise-trained-${ex.id}`}
+                            >
+                              <GraduationCap className="size-3" />
+                              Training complete
+                            </div>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {!exercises || !stages
+                ? Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="h-32 animate-pulse rounded-lg bg-secondary" />
                   ))
                 : null}

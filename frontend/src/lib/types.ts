@@ -241,8 +241,10 @@ export interface Simulation {
   difficulty_name: string;
   scenario: ScenarioBrief;
   status: "active" | "completed";
-  mode: "guided" | "business";
+  mode: "guided" | "business" | "journey";
   voice_persona: string;
+  journey_id: string | null;
+  prior_context: string;
   transcript: TranscriptTurn[];
   started_at: string;
   ended_at: string | null;
@@ -303,6 +305,66 @@ export interface BadgeItem {
   earned: boolean;
 }
 
+export interface Hint {
+  stage: string;
+  goal: string;
+  example: string;
+  avoid: string;
+  reveal_example: boolean;
+}
+
+export interface LearningStage {
+  id: string;
+  order: number;
+  name: string;
+  goal: string;
+  exercise_ids: string[];
+}
+
+export interface JourneyStage {
+  exercise_id: string;
+  objective: string;
+  situation: string;
+  mood: string;
+  completed: boolean;
+  best_score: number | null;
+  simulation_id: string | null;
+}
+
+export interface JourneyView {
+  id: string;
+  title: string;
+  blurb: string;
+  character: string;
+  role: string;
+  company: string;
+  company_size: string;
+  industry: string;
+  product: string;
+  seller_role: string;
+  public: string;
+  stages: JourneyStage[];
+  completed_stages: number;
+  next_exercise_id: string | null;
+}
+
+export interface ReadinessCategory {
+  category: string;
+  score: number;
+  weight: number;
+  attempts: number;
+}
+
+export interface Readiness {
+  score: number;
+  label: string;
+  categories: ReadinessCategory[];
+  biggest_opportunity: string | null;
+  recommendation: string;
+  covered: number;
+  total_weighted: number;
+}
+
 export interface Nudge {
   level: "fresh" | "due" | "lapsed" | "never";
   days_since: number | null;
@@ -331,6 +393,7 @@ export interface Assignment {
 export interface Dashboard {
   user: UserProfile;
   nudge: Nudge;
+  readiness: Readiness;
   assignments: Assignment[];
   completed: number;
   average_score: number;

@@ -69,6 +69,15 @@ EXERCISES = [
         "icon": "users",
     },
     {
+        "id": "networking",
+        "name": "Networking & Relationship Building",
+        "tagline": "Start with curiosity, not a pitch.",
+        "description": "Begin a conversation with a stranger, find common ground, learn what they do and earn a reason to follow up — without selling.",
+        "skills": ["Rapport", "Question Quality", "Active Listening", "Next Steps"],
+        "duration_min": 6,
+        "icon": "users",
+    },
+    {
         "id": "phone-sales",
         "name": "Phone Sales",
         "tagline": "Your voice is the only tool you have.",
@@ -78,6 +87,57 @@ EXERCISES = [
         "icon": "phone",
     },
 ]
+
+# Recommended learning order. Skills build on one another; nothing is hard-locked.
+STAGES = [
+    {
+        "id": "foundations",
+        "order": 1,
+        "name": "Communication foundations",
+        "goal": "Be able to explain who you help and why it matters before you sell anything.",
+        "exercise_ids": ["commercial-30s", "value-statement"],
+    },
+    {
+        "id": "starting",
+        "order": 2,
+        "name": "Starting conversations",
+        "goal": "Open conversations with strangers and earn the right to continue.",
+        "exercise_ids": ["networking", "cold-call", "phone-sales"],
+    },
+    {
+        "id": "understanding",
+        "order": 3,
+        "name": "Understanding the customer",
+        "goal": "Diagnose before you prescribe: questions, listening, impact, qualification.",
+        "exercise_ids": ["discovery"],
+    },
+    {
+        "id": "resistance",
+        "order": 4,
+        "name": "Managing resistance",
+        "goal": "Explore an objection before answering it — the stated objection is rarely the real one.",
+        "exercise_ids": ["objection-handling"],
+    },
+    {
+        "id": "real-world",
+        "order": 5,
+        "name": "Real-world selling",
+        "goal": "Combine every skill in an unstructured, unpredictable conversation.",
+        "exercise_ids": ["in-person"],
+    },
+    {
+        "id": "commitment",
+        "order": 6,
+        "name": "Earning commitment",
+        "goal": "Read readiness and ask for the right commitment for where the buyer actually is.",
+        "exercise_ids": ["closing"],
+    },
+]
+
+
+def stage_for_exercise(exercise_id: str):
+    return next((st for st in STAGES if exercise_id in st["exercise_ids"]), None)
+
 
 DIFFICULTIES = [
     {
@@ -396,6 +456,7 @@ SCENARIOS = [
 ]
 
 SKILL_CATEGORIES = [
+    "Relationship Memory",
     "Opening",
     "Rapport",
     "Discovery",
@@ -447,3 +508,19 @@ def level_for_xp(xp: int) -> int:
 
 def xp_for_level(level: int) -> int:
     return int(((level - 1) ** 2) * 250)
+
+
+# Weighted readiness: not every competency matters equally for talking to a real customer.
+READINESS_WEIGHTS = {
+    "Discovery": 0.20,
+    "Active Listening": 0.15,
+    "Objection Handling": 0.15,
+    "Value Communication": 0.15,
+    "Closing": 0.05,
+    "Next Steps": 0.05,
+    "Opening": 0.05,
+    "Rapport": 0.05,
+    "Clarity": 0.05,
+    "Confidence": 0.05,
+    "Relationship Memory": 0.05,
+}

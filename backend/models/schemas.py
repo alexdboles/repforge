@@ -211,7 +211,8 @@ class SimulationStart(BaseModel):
     difficulty: int
     scenario_id: Optional[str] = None
     custom_scenario_id: Optional[str] = None
-    mode: Literal["guided", "business"] = "guided"
+    journey_id: Optional[str] = None
+    mode: Literal["guided", "business", "journey"] = "guided"
 
 
 class TurnRequest(BaseModel):
@@ -292,8 +293,10 @@ class Simulation(BaseModel):
     difficulty_name: str
     scenario: dict[str, Any]
     status: Literal["active", "completed"] = "active"
-    mode: Literal["guided", "business"] = "guided"
+    mode: Literal["guided", "business", "journey"] = "guided"
     voice_persona: str = "default"
+    journey_id: Optional[str] = None
+    prior_context: str = ""
     transcript: list[TranscriptTurn] = []
     started_at: datetime = Field(default_factory=_now)
     ended_at: Optional[datetime] = None
@@ -315,6 +318,58 @@ class SimulationSummary(BaseModel):
     duration_seconds: int
     overall_score: Optional[int] = None
     turns: int = 0
+
+
+class Hint(BaseModel):
+    stage: str
+    goal: str
+    example: str
+    avoid: str = ""
+    reveal_example: bool = False
+
+
+class JourneyStage(BaseModel):
+    exercise_id: str
+    objective: str
+    situation: str
+    mood: str
+    completed: bool = False
+    best_score: Optional[int] = None
+    simulation_id: Optional[str] = None
+
+
+class JourneyView(BaseModel):
+    id: str
+    title: str
+    blurb: str
+    character: str
+    role: str
+    company: str
+    company_size: str
+    industry: str
+    product: str
+    seller_role: str
+    public: str
+    stages: list[JourneyStage] = []
+    completed_stages: int = 0
+    next_exercise_id: Optional[str] = None
+
+
+class ReadinessCategory(BaseModel):
+    category: str
+    score: int
+    weight: int
+    attempts: int
+
+
+class Readiness(BaseModel):
+    score: int
+    label: str
+    categories: list[ReadinessCategory] = []
+    biggest_opportunity: Optional[str] = None
+    recommendation: str = ""
+    covered: int = 0
+    total_weighted: int = 0
 
 
 # ---------- attempt comparison ----------
@@ -446,6 +501,7 @@ class Recommendation(BaseModel):
 class Dashboard(BaseModel):
     user: UserProfile
     nudge: Nudge
+    readiness: Readiness
     assignments: list[Assignment] = []
     completed: int
     average_score: int

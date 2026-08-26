@@ -12,7 +12,9 @@ from models.schemas import VoiceStatus
 router = APIRouter(tags=["voice"])
 
 ELEVEN_URL = "https://api.elevenlabs.io/v1/text-to-speech"
-MODEL_ID = "eleven_turbo_v2_5"
+# multilingual_v2 is noticeably more human than the turbo models: better prosody,
+# breaths and emotional range. Worth the extra few hundred ms for realism.
+MODEL_ID = "eleven_multilingual_v2"
 
 # Persona → ElevenLabs stock voice. Matched to the prospect archetypes the
 # simulator generates so voice and behaviour reinforce each other.
@@ -28,12 +30,20 @@ VOICES: dict[str, dict[str, str]] = {
 
 # Difficulty and mood shape delivery: higher difficulty is terser and less warm.
 STYLE_BY_DIFFICULTY = {
-    1: {"stability": 0.5, "similarity_boost": 0.75, "style": 0.25},
-    2: {"stability": 0.45, "similarity_boost": 0.75, "style": 0.3},
-    3: {"stability": 0.4, "similarity_boost": 0.8, "style": 0.35},
-    4: {"stability": 0.35, "similarity_boost": 0.8, "style": 0.45},
-    5: {"stability": 0.3, "similarity_boost": 0.85, "style": 0.55},
+    1: {"stability": 0.42, "similarity_boost": 0.85, "style": 0.35},
+    2: {"stability": 0.38, "similarity_boost": 0.85, "style": 0.42},
+    3: {"stability": 0.34, "similarity_boost": 0.88, "style": 0.5},
+    4: {"stability": 0.3, "similarity_boost": 0.9, "style": 0.58},
+    5: {"stability": 0.26, "similarity_boost": 0.92, "style": 0.68},
 }
+
+
+def _humanise(text: str) -> str:
+    """Light punctuation shaping so the model breathes like a person on a phone call."""
+    out = text.replace(" - ", " — ").replace("...", "…")
+    for filler in ("Look,", "Honestly,", "I mean,", "Well,", "Right,"):
+        out = out.replace(f"{filler} ", f"{filler}… ")
+    return out
 
 
 def _key() -> str | None:
@@ -89,7 +99,7 @@ async def speak(payload: SpeakRequest):
                 f"{ELEVEN_URL}/{voice['id']}",
                 headers={"xi-api-key": key, "Content-Type": "application/json"},
                 json={
-                    "text": text,
+                    "text": _humanise(text),
                     "model_id": MODEL_ID,
                     "voice_settings": {**settings, "use_speaker_boost": True},
                 },
