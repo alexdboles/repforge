@@ -102,16 +102,17 @@ export default function SimulationPage() {
   });
 
   const micWanted = useRef(false);
-  const send = useCallback(
-    (text: string) => {
-      const clean = text.trim();
-      if (!clean || turnMutation.isPending || endedRef.current) return;
-      setPendingRep(clean);
-      setTurnError(null);
-      turnMutation.mutate(clean);
-    },
-    [turnMutation],
-  );
+  // The mutation object is a new value on every render; keeping it in a ref lets
+  // send() stay referentially stable for useMic without ever going stale.
+  const turnRef = useRef(turnMutation);
+  turnRef.current = turnMutation;
+  const send = useCallback((text: string) => {
+    const clean = text.trim();
+    if (!clean || turnRef.current.isPending || endedRef.current) return;
+    setPendingRep(clean);
+    setTurnError(null);
+    turnRef.current.mutate(clean);
+  }, []);
 
   const mic = useMic(send);
 
@@ -125,7 +126,7 @@ export default function SimulationPage() {
     voice.speak(line, () => {
       if (micWanted.current && !endedRef.current) mic.start();
     });
-  }, [pendingSpeak, muted, mic, voice]);
+  }, [pendingSpeak, muted, mic, voice]); // mic/voice are stable hook APIs
 
   const coachingOn = Boolean(sim && sim.difficulty <= 2);
   const { data: hint, isFetching: hintLoading } = useQuery({
@@ -202,16 +203,18 @@ export default function SimulationPage() {
     }
   };
 
+  const toggleMicRef = useRef(toggleMic);
+  toggleMicRef.current = toggleMic;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space" && e.target === document.body) {
         e.preventDefault();
-        toggleMic();
+        toggleMicRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   if (!userId) return <Navigate to="/" replace />;
 
@@ -404,7 +407,7 @@ export default function SimulationPage() {
             >
               {turns.map((t, i) => (
                 <div
-                  key={i}
+                  key={`${i}-${t.speaker}-${t.at}`}
                   className={cn(
                     "max-w-[85%] rounded-lg px-3.5 py-2.5 text-[13.5px] leading-relaxed animate-rise",
                     t.speaker === "prospect"

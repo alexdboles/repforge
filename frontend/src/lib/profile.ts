@@ -9,7 +9,8 @@ const TOKEN_KEY = "vocalpitch.session_token";
 export function getToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY);
-  } catch {
+  } catch (err) {
+    console.error("localStorage read failed", err);
     return null;
   }
 }
@@ -17,23 +18,24 @@ export function getToken(): string | null {
 export function setToken(token: string): void {
   try {
     localStorage.setItem(TOKEN_KEY, token);
-  } catch {
-    /* storage unavailable */
+  } catch (err) {
+    console.error("localStorage write failed", err);
   }
 }
 
 export function clearToken(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage unavailable */
+  } catch (err) {
+    console.error("localStorage write failed", err);
   }
 }
 
 export function getUserId(): string | null {
   try {
     return localStorage.getItem(KEY);
-  } catch {
+  } catch (err) {
+    console.error("localStorage read failed", err);
     return null;
   }
 }
@@ -41,16 +43,16 @@ export function getUserId(): string | null {
 export function setUserId(id: string): void {
   try {
     localStorage.setItem(KEY, id);
-  } catch {
-    /* storage unavailable */
+  } catch (err) {
+    console.error("localStorage write failed", err);
   }
 }
 
 export function clearUserId(): void {
   try {
     localStorage.removeItem(KEY);
-  } catch {
-    /* storage unavailable */
+  } catch (err) {
+    console.error("localStorage write failed", err);
   }
 }
 

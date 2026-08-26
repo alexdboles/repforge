@@ -9,7 +9,8 @@ const SESSION_FLAG = "repforge.audio_verified";
 export function audioAlreadyVerified(): boolean {
   try {
     return sessionStorage.getItem(SESSION_FLAG) === "1";
-  } catch {
+  } catch (err) {
+    console.error("sessionStorage read failed", err);
     return false;
   }
 }
@@ -17,8 +18,8 @@ export function audioAlreadyVerified(): boolean {
 function markVerified() {
   try {
     sessionStorage.setItem(SESSION_FLAG, "1");
-  } catch {
-    /* storage unavailable */
+  } catch (err) {
+    console.error("sessionStorage write failed", err);
   }
 }
 
@@ -78,7 +79,8 @@ export default function MicCheck({
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
-    } catch {
+    } catch (err) {
+      console.error("microphone permission or device unavailable", err);
       setMicState("denied");
     }
   }, []);
@@ -102,7 +104,8 @@ export default function MicCheck({
       audio.onended = () => setVoiceState("ready");
       await audio.play();
       setVoiceState("ready");
-    } catch {
+    } catch (err) {
+      console.error("buyer voice test failed", err);
       setVoiceState("failed");
     }
   }, [prospectName, difficulty]);

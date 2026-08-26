@@ -1,0 +1,102 @@
+{
+  "iteration": 4,
+  "mode": "retest",
+  "passed": 12,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Regression: whole backend pytest suite (secrets.choice scenario selection, authorization/hard-stop/voice tests)",
+      "name": "pytest -q (11 pre-existing files)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> '11 passed in 68.29s'. Covers cross-user IDOR, hidden intel, mic voice speak, negative states, retry-that-moment, unauthenticated access, end-simulation-hard-stop tests."
+    },
+    {
+      "criterion": "Bearer session token is short-lived (12h) while the cookie stays long-lived (14d)",
+      "name": "test_tscheck_bearer_token_short_lived.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /auth/guest -> 200; bearer token exp ~12.00h from now (assert 11.5-12.5h); Set-Cookie repforge_session has HttpOnly, Secure, samesite=none, Max-Age=1209600 (14d); cookie JWT exp ~14.00d from now; GET /auth/me -> 200 using ONLY the cookie header, and separately -> 200 using ONLY the Authorization: Bearer header, returning the same user id. 1 passed in 0.75s."
+    },
+    {
+      "criterion": "No regression after code-quality refactor: full core loop (sign-in -> demo launch -> mic-check-skip -> typed reply -> prospect reply -> End -> scorecard with sane 0-100 score/talk_ratio, category scores, strengths, misses)",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: graded-report screenshot shows Overall=7 (0-100 scale), Talk ratio=56% (0-100), competency category score (Opening=5), 'Objective not achieved' miss with rationale, and a 'What you did well' strength card with quoted transcript excerpt - all sections rendered with sane values. Full retry-moment flow (banner, retry score, moment-retry-verdict, original sim unchanged) also passed."
+    },
+    {
+      "criterion": "Regression: Retry That Moment end to end (API)",
+      "name": "test_tscheck_retry_that_moment.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Part of the pytest run above; weak-pitch call graded, /retry-moment 200 with origin_score preserved, original sim unchanged after retry, foreign-user and out-of-range miss_index correctly 404."
+    },
+    {
+      "criterion": "Regression: Retry That Moment UI flow",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: retry-moment-0 -> /simulation/<newid> with moment-retry-banner; typed reply + End -> moment-retry-summary + moment-retry-verdict shown; original simulation confirmed unchanged."
+    },
+    {
+      "criterion": "Regression: End Simulation hard stop",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: double end-simulation-button click during grading -> one 409 on the duplicate in-flight call (expected) -> /scorecard/<id> reached cleanly."
+    },
+    {
+      "criterion": "Regression: mic check gates and is skippable",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: mic-check appears with mic-check-skip, second sim in same session skips the gate (sessionStorage flag)."
+    },
+    {
+      "criterion": "Regression: mic check buyer-voice test uses ElevenLabs",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: mic-check-test-voice -> POST /api/voice/speak 200 audio/*, voice-status becomes 'Ready'."
+    },
+    {
+      "criterion": "Regression: sample report clearly labeled",
+      "name": "sample-report-clearly-labeled",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: sample-report-badge 'Sample data - not your performance' and all sample sections visible, no HTTP>=400."
+    },
+    {
+      "criterion": "Regression: no VocalPitch branding remains",
+      "name": "rebrand-no-vocalpitch",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: zero visible 'VocalPitch' occurrences on / and /dashboard."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop / email signup-login persistence / session survives without cookies / demo launch reaches simulation",
+      "name": "guest-signin-no-loop, email-signup-login-persist, session-survives-without-cookies, demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "All 4 re-run by name, all passed with no unexpected console errors or HTTP>=400 (only expected anonymous 401 probes)."
+    },
+    {
+      "criterion": "No new console errors from React key/hook changes across pages and in a live simulation; spacebar mic toggle still responds",
+      "name": "no-react-key-hook-regressions",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "New check: browsed /, /dashboard, /training, /sample-report, /voice-cast, then launched a live simulation (mic-check-skip) and pressed Space twice for the mic toggle. No 'Maximum update depth exceeded', no duplicate/missing-key React warnings, no uncaught page errors; transcript-live remained visible/responsive throughout. Only console noise was the expected anonymous 401 probe."
+    }
+  ],
+  "bugs": [],
+  "action_items": [],
+  "notes": [
+    "Matrix had 6 criteria; expanded to 12 checks total (2 backend + 9 browser re-runs by name + 1 new backend test + 1 new browser check) since several criteria bundle multiple regression sub-items explicitly named in the briefing.",
+    "spec_deviations from briefing (skeleton array-index keys, bearer token in localStorage, large components not split) are accepted as intentional and were not re-flagged as bugs."
+  ]
+}

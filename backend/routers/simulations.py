@@ -1,5 +1,5 @@
 import logging
-import random
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -132,7 +132,7 @@ async def start_simulation(payload: SimulationStart, me: dict = Depends(current_
         scenario = (
             scenario_by_id(payload.scenario_id)
             if payload.scenario_id
-            else random.choice(scenarios_for_exercise(payload.exercise_id))
+            else secrets.choice(scenarios_for_exercise(payload.exercise_id))
         )
     if not scenario:
         raise HTTPException(status_code=404, detail="Unknown scenario")

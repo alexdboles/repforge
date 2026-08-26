@@ -22,7 +22,8 @@ export function authHeaders(): Record<string, string> {
   try {
     const token = localStorage.getItem("vocalpitch.session_token");
     return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
+  } catch (err) {
+    console.error("could not read the session token", err);
     return {};
   }
 }
@@ -47,8 +48,8 @@ async function request<T>(method: string, path: string, body?: JsonBody): Promis
       try {
         localStorage.removeItem("vocalpitch.user_id");
         localStorage.removeItem("vocalpitch.session_token");
-      } catch {
-        /* storage unavailable */
+      } catch (err) {
+        console.error("could not clear the expired session", err);
       }
     }
     throw new ApiError(res.status, errBody);

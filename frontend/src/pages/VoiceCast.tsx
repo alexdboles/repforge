@@ -45,7 +45,8 @@ export default function VoiceCast() {
       audioRef.current = audio;
       audio.onended = () => setPlaying(null);
       await audio.play();
-    } catch {
+    } catch (err) {
+      console.error("voice preview failed", err);
       setPlaying(null);
       toast.error(`${character}'s voice could not be produced.`);
     }

@@ -1,5 +1,5 @@
 """Practice My Business: saved sales profiles + AI-generated custom scenarios."""
-import random
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -66,7 +66,7 @@ VARIATIONS = {
 
 
 def _variation() -> dict[str, str]:
-    return {k: random.choice(v) for k, v in VARIATIONS.items()}
+    return {k: secrets.choice(v) for k, v in VARIATIONS.items()}
 
 
 PUBLIC_SCENARIO_KEYS = (

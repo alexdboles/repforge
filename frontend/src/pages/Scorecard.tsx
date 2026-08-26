@@ -310,7 +310,7 @@ export default function Scorecard() {
                   <div className="mt-4 space-y-3" data-testid="strengths-list">
                     {evaluation.strengths.map((s, i) => (
                       <div
-                        key={i}
+                        key={`${i}-${s.title}`}
                         className="rounded-md border-l-4 border-emerald-500 bg-emerald-50/70 p-3.5"
                         data-testid={`strength-${i}`}
                       >
@@ -344,7 +344,7 @@ export default function Scorecard() {
                   <div className="mt-4 space-y-3" data-testid="misses-list">
                     {evaluation.misses.map((s, i) => (
                       <div
-                        key={i}
+                        key={`${i}-${s.title}`}
                         className="rounded-md border-l-4 border-amber-500 bg-amber-50/70 p-3.5"
                         data-testid={`miss-${i}`}
                       >
@@ -394,7 +394,7 @@ export default function Scorecard() {
               <div className="mt-4 grid gap-4 md:grid-cols-3" data-testid="coaching-priorities">
                 {evaluation.coaching_priorities.map((c, i) => (
                   <div
-                    key={i}
+                    key={`${i}-${c.skill}`}
                     className="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
                     data-testid={`coaching-priority-${i}`}
                   >
@@ -489,7 +489,7 @@ export default function Scorecard() {
                         const tags = momentsByTurn.get(i) ?? [];
                         if (tagFilter && !tags.some((x) => x.tag === tagFilter)) return null;
                         return (
-                          <div key={i} data-testid={`transcript-turn-${i}`}>
+                          <div key={`${i}-${t.speaker}`} data-testid={`transcript-turn-${i}`}>
                             <div
                               className={cn(
                                 "rounded-lg p-3.5 text-[13.5px] leading-relaxed",
@@ -536,7 +536,7 @@ export default function Scorecard() {
                     <div className="mt-4 space-y-3" data-testid="moments-list">
                       {filteredMoments.map((mo, i) => (
                         <button
-                          key={i}
+                          key={`${mo.tag}-${mo.turn_index}-${i}`}
                           type="button"
                           onClick={() => setTagFilter(mo.tag)}
                           className="w-full rounded-md bg-secondary p-3 text-left"

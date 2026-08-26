@@ -17,6 +17,10 @@ from lib.db import db
 COOKIE_NAME = "repforge_session"
 ALGORITHM = "HS256"
 SESSION_DAYS = 14
+# The bearer token handed to the browser is deliberately much shorter-lived than
+# the httpOnly cookie: it is the fallback for cookie-blocked contexts (preview
+# iframes) and is the only piece of the session that JS can read.
+BEARER_HOURS = 12
 
 
 def _secret() -> str:
@@ -47,20 +51,27 @@ def issue_session(response: Response, user_id: str) -> str:
     the body and replayed as an Authorization header — otherwise sign-in loops
     back to the login screen inside an iframe.
     """
-    expires = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
-    token = jwt.encode(
-        {"sub": user_id, "exp": expires}, _secret(), algorithm=ALGORITHM
+    now = datetime.now(timezone.utc)
+    cookie_token = jwt.encode(
+        {"sub": user_id, "exp": now + timedelta(days=SESSION_DAYS)},
+        _secret(),
+        algorithm=ALGORITHM,
+    )
+    bearer_token = jwt.encode(
+        {"sub": user_id, "exp": now + timedelta(hours=BEARER_HOURS)},
+        _secret(),
+        algorithm=ALGORITHM,
     )
     response.set_cookie(
         COOKIE_NAME,
-        token,
+        cookie_token,
         httponly=True,
         secure=True,
         samesite="none",
         max_age=SESSION_DAYS * 24 * 3600,
         path="/",
     )
-    return token
+    return bearer_token
 
 
 def clear_session(response: Response) -> None:

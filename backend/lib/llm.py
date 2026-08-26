@@ -228,41 +228,77 @@ Judge how much of the hidden information the rep actually uncovered and whether 
     return _normalize(_parse_json(raw))
 
 
+METRIC_KEYS = (
+    "talk_ratio",
+    "question_count",
+    "open_questions",
+    "closed_questions",
+    "filler_words",
+    "avg_response_words",
+    "longest_monologue_words",
+    "objection_count",
+    "objections_handled",
+)
+
+
+def _int(value: Any, default: int = 0, low: int | None = None, high: int | None = None) -> int:
+    """Coerce best-effort LLM JSON into a bounded int."""
+    try:
+        out = int(value)
+    except (TypeError, ValueError):
+        out = default
+    if low is not None:
+        out = max(low, out)
+    if high is not None:
+        out = min(high, out)
+    return out
+
+
+def _dicts(value: Any) -> list[dict[str, Any]]:
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def _categories(value: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "category": str(c.get("category") or "General"),
+            "score": _int(c.get("score"), 0, 0, 100),
+            "note": str(c.get("note") or ""),
+        }
+        for c in _dicts(value)
+    ]
+
+
+def _moments(value: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "tag": str(m.get("tag") or "strong-question"),
+            "turn_index": _int(m.get("turn_index"), 0, 0),
+            "explanation": str(m.get("explanation") or ""),
+        }
+        for m in _dicts(value)
+    ]
+
+
+def _metrics(value: Any) -> dict[str, int]:
+    raw = value if isinstance(value, dict) else {}
+    out = {key: _int(raw.get(key), 0, 0) for key in METRIC_KEYS}
+    out["talk_ratio"] = min(100, out["talk_ratio"])
+    return out
+
+
 def _normalize(data: dict[str, Any]) -> dict[str, Any]:
     """LLM JSON is best-effort: coerce shapes so a missing key never 502s a debrief."""
     out = dict(data)
-
-    def as_list(key: str) -> list[dict[str, Any]]:
-        value = out.get(key)
-        return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
-
-    try:
-        out["overall_score"] = max(0, min(100, int(out.get("overall_score") or 0)))
-    except (TypeError, ValueError):
-        out["overall_score"] = 0
-
-    cats = []
-    for c in as_list("category_scores"):
-        try:
-            score = max(0, min(100, int(c.get("score") or 0)))
-        except (TypeError, ValueError):
-            score = 0
-        cats.append(
-            {
-                "category": str(c.get("category") or "General"),
-                "score": score,
-                "note": str(c.get("note") or ""),
-            }
-        )
-    out["category_scores"] = cats
-
+    out["overall_score"] = _int(out.get("overall_score"), 0, 0, 100)
+    out["category_scores"] = _categories(out.get("category_scores"))
     out["strengths"] = [
         {
             "title": str(s.get("title") or "Strength"),
             "detail": str(s.get("detail") or ""),
             "quote": str(s.get("quote") or ""),
         }
-        for s in as_list("strengths")
+        for s in _dicts(out.get("strengths"))
     ]
     out["misses"] = [
         {
@@ -271,7 +307,7 @@ def _normalize(data: dict[str, Any]) -> dict[str, Any]:
             "quote": str(s.get("quote") or ""),
             "better_approach": str(s.get("better_approach") or ""),
         }
-        for s in as_list("misses")
+        for s in _dicts(out.get("misses"))
     ]
     out["coaching_priorities"] = [
         {
@@ -279,53 +315,16 @@ def _normalize(data: dict[str, Any]) -> dict[str, Any]:
             "why": str(s.get("why") or s.get("reason") or ""),
             "drill": str(s.get("drill") or s.get("practice") or ""),
         }
-        for s in as_list("coaching_priorities")
+        for s in _dicts(out.get("coaching_priorities"))
     ]
-
-    moments = []
-    for m in as_list("moments"):
-        try:
-            idx = int(m.get("turn_index") or 0)
-        except (TypeError, ValueError):
-            idx = 0
-        moments.append(
-            {
-                "tag": str(m.get("tag") or "strong-question"),
-                "turn_index": max(0, idx),
-                "explanation": str(m.get("explanation") or ""),
-            }
-        )
-    out["moments"] = moments
-
-    metrics = out.get("metrics") if isinstance(out.get("metrics"), dict) else {}
-    clean_metrics: dict[str, int] = {}
-    for key in (
-        "talk_ratio",
-        "question_count",
-        "open_questions",
-        "closed_questions",
-        "filler_words",
-        "avg_response_words",
-        "longest_monologue_words",
-        "objection_count",
-        "objections_handled",
-    ):
-        try:
-            clean_metrics[key] = max(0, int(metrics.get(key) or 0))
-        except (TypeError, ValueError):
-            clean_metrics[key] = 0
-    clean_metrics["talk_ratio"] = min(100, clean_metrics["talk_ratio"])
-    out["metrics"] = clean_metrics
-
+    out["moments"] = _moments(out.get("moments"))
+    out["metrics"] = _metrics(out.get("metrics"))
     out["headline"] = str(out.get("headline") or "")
     out["objective_note"] = str(out.get("objective_note") or "")
     out["objective_met"] = bool(out.get("objective_met"))
     out["recommended_reason"] = str(out.get("recommended_reason") or "")
     out["recommended_exercise_id"] = str(out.get("recommended_exercise_id") or "discovery")
-    try:
-        out["recommended_difficulty"] = max(1, min(5, int(out.get("recommended_difficulty") or 2)))
-    except (TypeError, ValueError):
-        out["recommended_difficulty"] = 2
+    out["recommended_difficulty"] = _int(out.get("recommended_difficulty"), 2, 1, 5)
     return out
 
 

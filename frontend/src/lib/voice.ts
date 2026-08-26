@@ -102,8 +102,9 @@ export function useMic(onUtterance: (text: string) => void) {
       if (wantRef.current) {
         try {
           rec.start();
-        } catch {
-          /* already restarting */
+        } catch (err) {
+          // Chrome throws if start() lands while the engine is still restarting.
+          console.debug("speech recognition restart ignored", err);
         }
       } else {
         setListening(false);
@@ -115,7 +116,8 @@ export function useMic(onUtterance: (text: string) => void) {
     try {
       rec.start();
       setListening(true);
-    } catch {
+    } catch (err) {
+      console.error("microphone start failed", err);
       setError("Microphone could not be started. Use the text box to reply.");
     }
   }, []);
