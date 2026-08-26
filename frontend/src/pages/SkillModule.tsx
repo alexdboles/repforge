@@ -234,7 +234,7 @@ export default function SkillModule() {
                 <h2 className="font-heading text-[19px] font-bold">Weak vs strong</h2>
                 {mod.examples.map((ex, i) => (
                   <div
-                    key={i}
+                    key={`${i}-${ex.weak.slice(0, 24)}`}
                     className="overflow-hidden rounded-xl border border-border bg-card"
                     data-testid={`module-example-${i}`}
                   >

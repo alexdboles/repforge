@@ -1,0 +1,119 @@
+{
+  "iteration": 5,
+  "mode": "retest",
+  "passed": 14,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Regression: whole backend pytest suite after secrets/_normalize changes",
+      "name": "pytest -q (12 files)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "cd /app/backend && python -m pytest -q -p no:cacheprovider -> '12 passed in 67.32s'. Covers bearer token lifetime, cross-user IDOR, hidden intel, mic voice speak, negative states, retry-that-moment, unauthenticated access, end-simulation-hard-stop."
+    },
+    {
+      "criterion": "No regression from second refactor pass (MicPanel/VoicePanel split, WaveBars extraction, stable keys) - mic-check gate + skip",
+      "name": "mic-check-gates-and-skippable",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: mic-check-mic-status/voice-status/test-mic/test-voice/start/skip all present; gate blocks start until ready; mic-check-skip enters call; second sim in same session skips the gate (sessionStorage flag). No console errors besides expected 401 probe."
+    },
+    {
+      "criterion": "mic-check-test-voice returns 200 audio and flips status to Ready; voice cast uses ElevenLabs",
+      "name": "mic-check-buyer-voice-uses-elevenlabs",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: mic-check-test-voice -> POST /api/voice/speak 200 audio/*, voice-status becomes 'Ready \u2713'."
+    },
+    {
+      "criterion": "Regression: End Simulation hard stop",
+      "name": "end-simulation-hard-stop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: double end-simulation-button click during grading -> one 409 on the duplicate in-flight call (expected) -> /scorecard/<id> reached cleanly, one grading only, no post-end prospect line."
+    },
+    {
+      "criterion": "Regression: Retry That Moment UI flow",
+      "name": "retry-moment-ui-flow",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: graded report with a miss -> moment-retry-banner -> retry sim -> moment-retry-summary with moment-retry-verdict shown; original sim unchanged."
+    },
+    {
+      "criterion": "Regression: guest sign-in, no redirect loop",
+      "name": "guest-signin-no-loop",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard and history reachable after guest sign-in, no loop; only expected 401 probe in console."
+    },
+    {
+      "criterion": "Regression: email signup/login persistence",
+      "name": "email-signup-login-persist",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: signup -> logout -> re-login persists session; wrong-password rejected. 4 expected 401 probes only."
+    },
+    {
+      "criterion": "Regression: session survives without cookies",
+      "name": "session-survives-without-cookies",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: dashboard still visible after clearing cookies (bearer token fallback)."
+    },
+    {
+      "criterion": "Regression: demo launch reaches simulation",
+      "name": "demo-launch-reaches-simulation",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: demo-launch-button (scrolled into view) -> simulation started screenshot confirmed."
+    },
+    {
+      "criterion": "Regression: no VocalPitch branding remains",
+      "name": "rebrand-no-vocalpitch",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: zero visible 'VocalPitch' occurrences on / and /dashboard."
+    },
+    {
+      "criterion": "Regression: sample report clearly labeled",
+      "name": "sample-report-clearly-labeled",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: sample-report-badge 'Sample data - not your performance' and all sample sections visible."
+    },
+    {
+      "criterion": "Regression: voice cast page check",
+      "name": "voice-cast-verified-with-preview",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: voice-cast list renders, preview click works without errors."
+    },
+    {
+      "criterion": "No new React warnings from key changes across pages and a live simulation",
+      "name": "no-react-key-hook-regressions",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: browsed /, /dashboard, /training, /sample-report, /voice-cast, launched a live sim (mic-check-skip), spacebar mic toggle responsive. No duplicate-key warnings, no 'Maximum update depth exceeded', no uncaught errors; only expected anonymous 401 probe."
+    },
+    {
+      "criterion": "Regression: training library coming-soon cards render",
+      "name": "training-library-coming-soon-cards",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-run by name: /training shows coming-soon cards correctly."
+    }
+  ],
+  "bugs": [],
+  "action_items": [],
+  "notes": [
+    "Retest mode: backend pytest suite re-run first (12 passed, no new failures vs previous 11 - one new test_tscheck_bearer_token_short_lived.py already counted), then all 13 existing named browser checks re-run by name only (no script resent) exactly as required by retest-mode instructions.",
+    "Matrix listed 5 criteria bundling many regression sub-items; expanded to 14 checks total (1 backend suite run + 13 browser re-runs by name) to give each explicitly named regression its own checks[] entry, consistent with iteration_4's approach.",
+    "No new criteria required new artifacts this round - all named checks/tests from iteration_4 already covered the briefing's acceptance_matrix.",
+    "spec_deviations from briefing (decorative index keys, bearer token in localStorage, large components not split) remain accepted as intentional, not flagged as bugs.",
+    "Only console noise across all checks was the expected anonymous 401 on GET /api/auth/me and expected 409s from the intentional double-click hard-stop test."
+  ]
+}

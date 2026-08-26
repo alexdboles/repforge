@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils";
 
 const SESSION_FLAG = "repforge.audio_verified";
 
+type MicState = "idle" | "asking" | "listening" | "heard" | "denied";
+type VoiceState = "idle" | "loading" | "ready" | "failed";
+
 export function audioAlreadyVerified(): boolean {
   try {
     return sessionStorage.getItem(SESSION_FLAG) === "1";
@@ -36,11 +39,9 @@ export default function MicCheck({
   difficulty: number;
   onStart: () => void;
 }) {
-  const [micState, setMicState] = useState<"idle" | "asking" | "listening" | "heard" | "denied">(
-    "idle",
-  );
+  const [micState, setMicState] = useState<MicState>("idle");
   const [level, setLevel] = useState(0);
-  const [voiceState, setVoiceState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const streamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -118,8 +119,6 @@ export default function MicCheck({
     onStart();
   };
 
-  const bars = 14;
-
   return (
     <div className="grid flex-1 place-items-center px-5 py-10" data-testid="mic-check">
       <div className="w-full max-w-[520px] rounded-xl border border-[#1E293B] bg-[#111827] p-6">
@@ -129,108 +128,8 @@ export default function MicCheck({
           transcribed or scored.
         </p>
 
-        <section className="mt-6 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-200">
-              <Mic className="size-4 text-slate-400" />
-              Microphone
-            </span>
-            <span
-              className={cn(
-                "text-[12.5px] font-semibold",
-                micState === "heard"
-                  ? "text-emerald-400"
-                  : micState === "denied"
-                    ? "text-amber-400"
-                    : "text-slate-400",
-              )}
-              data-testid="mic-check-mic-status"
-            >
-              {micState === "idle"
-                ? "Not tested"
-                : micState === "asking"
-                  ? "Requesting permission…"
-                  : micState === "listening"
-                    ? "Connected — say something"
-                    : micState === "heard"
-                      ? "We can hear you ✓"
-                      : "No microphone — you can type instead"}
-            </span>
-          </div>
-          <div className="mt-3 flex h-8 items-end gap-1">
-            {Array.from({ length: bars }).map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "flex-1 rounded-sm transition-[height,background-color] duration-100",
-                  level * bars > i ? "bg-emerald-400" : "bg-slate-800",
-                )}
-                style={{ height: `${20 + Math.min(1, level * 1.4) * 80 * ((i % 5) / 5 + 0.5)}%` }}
-              />
-            ))}
-          </div>
-          {micState === "idle" || micState === "denied" ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="mt-3 font-semibold"
-              onClick={startMic}
-              data-testid="mic-check-test-mic"
-            >
-              {micState === "denied" ? (
-                <>
-                  <RefreshCw className="size-3.5" />
-                  Change microphone / retry
-                </>
-              ) : (
-                "Test my microphone"
-              )}
-            </Button>
-          ) : null}
-        </section>
-
-        <section className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-200">
-              <Volume2 className="size-4 text-slate-400" />
-              Buyer voice — {prospectName}
-            </span>
-            <span
-              className={cn(
-                "text-[12.5px] font-semibold",
-                voiceState === "ready"
-                  ? "text-emerald-400"
-                  : voiceState === "failed"
-                    ? "text-red-400"
-                    : "text-slate-400",
-              )}
-              data-testid="mic-check-voice-status"
-            >
-              {voiceState === "idle"
-                ? "Not tested"
-                : voiceState === "loading"
-                  ? "Preparing…"
-                  : voiceState === "ready"
-                    ? "Ready ✓"
-                    : "Voice connection failed"}
-            </span>
-          </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="mt-3 font-semibold"
-            onClick={testVoice}
-            disabled={voiceState === "loading"}
-            data-testid="mic-check-test-voice"
-          >
-            {voiceState === "loading" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Play className="size-3.5" />
-            )}
-            {voiceState === "failed" ? "Retry buyer audio" : "Test buyer audio"}
-          </Button>
-        </section>
+        <MicPanel state={micState} level={level} onTest={startMic} />
+        <VoicePanel prospectName={prospectName} state={voiceState} onTest={testVoice} />
 
         {ready ? (
           <p
@@ -264,5 +163,138 @@ export default function MicCheck({
         </div>
       </div>
     </div>
+  );
+}
+
+
+const MIC_LABEL: Record<MicState, string> = {
+  idle: "Not tested",
+  asking: "Requesting permission…",
+  listening: "Connected — say something",
+  heard: "We can hear you ✓",
+  denied: "No microphone — you can type instead",
+};
+
+/** Microphone status + live input meter. */
+function MicPanel({
+  state,
+  level,
+  onTest,
+}: {
+  state: MicState;
+  level: number;
+  onTest: () => void;
+}) {
+  const bars = 14;
+  return (
+    <section className="mt-6 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-200">
+          <Mic className="size-4 text-slate-400" />
+          Microphone
+        </span>
+        <span
+          className={cn(
+            "text-[12.5px] font-semibold",
+            state === "heard"
+              ? "text-emerald-400"
+              : state === "denied"
+                ? "text-amber-400"
+                : "text-slate-400",
+          )}
+          data-testid="mic-check-mic-status"
+        >
+          {MIC_LABEL[state]}
+        </span>
+      </div>
+      <div className="mt-3 flex h-8 items-end gap-1">
+        {Array.from({ length: bars }).map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "flex-1 rounded-sm transition-[height,background-color] duration-100",
+              level * bars > i ? "bg-emerald-400" : "bg-slate-800",
+            )}
+            style={{ height: `${20 + Math.min(1, level * 1.4) * 80 * ((i % 5) / 5 + 0.5)}%` }}
+          />
+        ))}
+      </div>
+      {state === "idle" || state === "denied" ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-3 font-semibold"
+          onClick={onTest}
+          data-testid="mic-check-test-mic"
+        >
+          {state === "denied" ? (
+            <>
+              <RefreshCw className="size-3.5" />
+              Change microphone / retry
+            </>
+          ) : (
+            "Test my microphone"
+          )}
+        </Button>
+      ) : null}
+    </section>
+  );
+}
+
+const VOICE_LABEL: Record<VoiceState, string> = {
+  idle: "Not tested",
+  loading: "Preparing…",
+  ready: "Ready ✓",
+  failed: "Voice connection failed",
+};
+
+/** Buyer-voice readiness: proves the speakers work AND that the character's own
+ * ElevenLabs voice loaded (there is no generic-TTS fallback). */
+function VoicePanel({
+  prospectName,
+  state,
+  onTest,
+}: {
+  prospectName: string;
+  state: VoiceState;
+  onTest: () => void;
+}) {
+  return (
+    <section className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-200">
+          <Volume2 className="size-4 text-slate-400" />
+          Buyer voice — {prospectName}
+        </span>
+        <span
+          className={cn(
+            "text-[12.5px] font-semibold",
+            state === "ready"
+              ? "text-emerald-400"
+              : state === "failed"
+                ? "text-red-400"
+                : "text-slate-400",
+          )}
+          data-testid="mic-check-voice-status"
+        >
+          {VOICE_LABEL[state]}
+        </span>
+      </div>
+      <Button
+        size="sm"
+        variant="secondary"
+        className="mt-3 font-semibold"
+        onClick={onTest}
+        disabled={state === "loading"}
+        data-testid="mic-check-test-voice"
+      >
+        {state === "loading" ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Play className="size-3.5" />
+        )}
+        {state === "failed" ? "Retry buyer audio" : "Test buyer audio"}
+      </Button>
+    </section>
   );
 }

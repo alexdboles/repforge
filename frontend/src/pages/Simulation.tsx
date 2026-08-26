@@ -21,6 +21,7 @@ import type { Simulation, TranscriptTurn, TurnResponse } from "@/lib/types";
 import { useMic, useProspectVoice } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
 import MicCheck, { audioAlreadyVerified } from "@/components/MicCheck";
+import WaveBars from "@/components/WaveBars";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -437,25 +438,10 @@ export default function SimulationPage() {
               ) : null}
             </div>
 
-            <div className="flex h-14 items-end justify-center gap-1 px-6 pb-2">
-              {Array.from({ length: 28 }).map((_, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "flex-1 origin-bottom rounded-sm transition-colors",
-                    speaking ? "bg-sky-400/80" : mic.listening ? "bg-emerald-400/70" : "bg-slate-800",
-                  )}
-                  style={{
-                    height: `${20 + ((i * 37) % 70)}%`,
-                    animation:
-                      speaking || mic.listening
-                        ? `wave ${0.8 + (i % 5) * 0.12}s ease-in-out ${i * 40}ms infinite`
-                        : undefined,
-                    transform: speaking || mic.listening ? undefined : "scaleY(0.2)",
-                  }}
-                />
-              ))}
-            </div>
+            <WaveBars
+              active={speaking || mic.listening}
+              tone={speaking ? "prospect" : mic.listening ? "rep" : "idle"}
+            />
 
             <div className="border-t border-[#1E293B] px-5 py-4">
               {voice.error ? (
