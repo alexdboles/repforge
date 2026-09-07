@@ -18,6 +18,21 @@ newly tested. See [VALIDATION.md](VALIDATION.md) for exact coverage and prior-ru
 
 ## Known limitations / operator decisions
 
+- Managed Google sign-in is integrated as an additional option. Real Google account
+  selection/consent still needs human verification; provider identity responses in
+  automated backend tests are MOCKED. The managed service's documented response lacks
+  an explicit verified-email claim, so first-time linking to an existing password
+  account may require its RepForge password once. No Google password is requested by RepForge.
+- Users who never set or do not know that password can request an account connection
+  using a non-secret reference. Requests do not grant access automatically or send email;
+  an authorised operator must verify and approve the connection. No-password records
+  skip the password form entirely. This preserves older records without an email-only
+  ownership bypass or silently creating a duplicate account.
+- The managed auth provider's `/oauth/` page and one asset returned HTTP404 during live
+  handoff checks. Support identified this as upstream; a rendered crawl could still
+  reach Google Accounts. App-owned callback/linking checks pass, but a clean real Google
+  consent/return journey is not yet verified. No guessed alternative endpoint was used.
+
 - The live portfolio domain was reachable but still displayed the older build. Updated
   production behaviour is not verified and no deployment was changed.
 - No independent email verification, automatic invite delivery, password recovery UI,

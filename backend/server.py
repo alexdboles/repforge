@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter, Request
+from fastapi import FastAPI, APIRouter, Request, HTTPException
 from starlette.responses import JSONResponse
 from urllib.parse import urlsplit
 from dotenv import load_dotenv
@@ -47,6 +47,7 @@ async def root():
 
 from routers import (  # noqa: E402
     auth,
+    google_auth,
     curriculum,
     insights,
     sales_profiles,
@@ -56,9 +57,11 @@ from routers import (  # noqa: E402
     voice,
     workspaces,
     evidence,
+    privacy,
 )
 
 api_router.include_router(auth.router)
+api_router.include_router(google_auth.router)
 api_router.include_router(training.router)
 api_router.include_router(users.router)
 api_router.include_router(simulations.router)
@@ -68,6 +71,7 @@ api_router.include_router(voice.router)
 api_router.include_router(insights.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(evidence.router)
+api_router.include_router(privacy.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -96,7 +100,20 @@ async def request_origin_guard(request: Request, call_next):
             return JSONResponse({'detail': 'Request origin is not allowed'}, status_code=403)
         if request.cookies.get('repforge_session') and not origin and not request.headers.get('authorization'):
             return JSONResponse({'detail': 'Origin required for cookie-authenticated changes'}, status_code=403)
-    response = await call_next(request)
+    # Normal API requests coexist, while erasure takes an exclusive account gate.
+    # Resolve the token without current_user's workspace side effects.
+    from lib.auth import session_actor
+    from lib.data_guard import data_operation
+    actor = await session_actor(request.cookies.get('repforge_session'), request.headers.get('authorization'))
+    destructive = request.method == 'DELETE' and request.url.path.startswith('/api/data/')
+    try:
+        if actor and request.url.path.startswith('/api/') and not destructive:
+            async with data_operation(actor['id']):
+                response = await call_next(request)
+        else:
+            response = await call_next(request)
+    except HTTPException as exc:
+        response = JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     if request.url.path.startswith('/api/'):

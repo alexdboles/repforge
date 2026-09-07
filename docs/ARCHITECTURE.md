@@ -27,6 +27,20 @@ interfaces are updated together; TypeScript alone does not validate network JSON
 
 ## Authentication and workspace privacy
 
+Managed Google sign-in is an additional entry point, not a replacement session stack.
+The current browser origin determines its dashboard callback. A 10-minute state plus
+tab-held verifier protects initiation/callback matching; the backend exchanges the
+temporary session ID with Emergent and never accepts browser-supplied identity claims.
+The documented managed response omits `email_verified`, so existing matching password
+accounts confirm their RepForge password once unless the trusted response explicitly
+attests verification. Subsequent logins use the bound managed identity. New users get
+isolated workspaces; no team/role inference uses Google email domains or display names.
+Upstream session tokens are discarded; the existing app cookie/bearer/revocation scheme
+is reused. Replay/expiry checks and unique bindings protect repeat callbacks. Embedded
+previews can open RepForge in a new tab for Google's account picker. Actual Google consent
+completion requires a human-owned Google session; synthetic test identities are not
+claimed as a live Google login.
+
 - Password accounts use bcrypt with a UTF-8 byte-length guard. Email is normalised;
   a unique database index arbitrates concurrent signup conflicts.
 - An HttpOnly cookie is primary. A 12-hour bearer fallback remains for preview iframe

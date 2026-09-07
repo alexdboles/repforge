@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Mic, BarChart3, Sparkles, ShieldCheck, Clock, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { beginSession } from '@/lib/session';
 import { useDemoLaunch } from '@/lib/demo';
 import { Label } from '@/components/ui/label';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
+import PrivacyLinks from '@/components/PrivacyLinks';
 
 const STEPS = [
   {
@@ -22,7 +24,7 @@ const STEPS = [
   {
     icon: Mic,
     title: "Talk to the prospect",
-    body: "Speak out loud. The AI buyer pushes back, objects, withholds detail, and never breaks character to coach you.",
+    body: "Speak or type. The AI buyer pushes back and withholds detail. Sales coaching follows the call; distress takes priority over roleplay.",
   },
   {
     icon: BarChart3,
@@ -32,8 +34,9 @@ const STEPS = [
 ];
 
 export default function Landing() {
+  const location = useLocation();
   const demo = useDemoLaunch();
-  const [showAuth, setShowAuth] = useState(false);
+  const [showAuth, setShowAuth] = useState(() => new URLSearchParams(location.search).get('signin') === 'google');
   const existing = getUserId();
   // A valid session cookie may outlive the cached id (new device tab, cleared
   // storage): ask the server who we are before showing the sign-in form.
@@ -59,6 +62,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="landing-page">
+      {new URLSearchParams(location.search).get('data') === 'deleted' && <p role='status' data-testid='landing-deletion-success' className='border-b border-emerald-200 bg-emerald-50 px-6 py-4 text-center text-sm text-emerald-900'>Your RepForge data was permanently deleted from the active database and this browser was signed out.</p>}
       <header className="border-b border-border">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-2.5">
@@ -211,7 +215,7 @@ export default function Landing() {
       <section className="mx-auto max-w-[1200px] px-5 py-14 sm:px-8">
         <h2 className="font-heading text-[24px] font-extrabold">The training library</h2>
         <p className="mt-2 text-[14px] text-muted-foreground">
-          Every exercise runs live, in voice, with a scored debrief afterwards.
+          Practise by voice or text, with AI coaching after the call. Browser support and provider allowances apply.
         </p>
         <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {libraryError ? <div role='alert' data-testid='landing-library-error'><p>Exercise details could not load.</p><Button data-testid='landing-library-retry' variant='outline' onClick={() => void retryLibrary()}>Retry library</Button></div> : null}
@@ -232,6 +236,7 @@ export default function Landing() {
             : null}
         </div>
       </section>
+      <footer className='mx-auto max-w-[1200px] border-t border-border px-5 py-8 sm:px-8'><PrivacyLinks prefix='landing-footer' /><p data-testid='landing-data-disclosure' className='mt-4 text-xs leading-6 text-muted-foreground'>AI practice stores transcripts, including guest sessions. Use fictional information. No paid subscription or billing is implemented.</p></footer>
     </div>
   );
 }
@@ -239,7 +244,7 @@ export default function Landing() {
 
 /** Email + password accounts, with a guest session for first-time visitors and
  * contest judges. Sessions live in an httpOnly cookie issued by the backend —
- * no token is ever stored in the browser. */
+ * the tab-scoped short-lived token supports cookie-blocked previews. */
 function AuthPanel() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signup");
@@ -314,6 +319,8 @@ function AuthPanel() {
         ))}
       </div>
 
+      <div className='mt-4' data-testid='google-auth-option'><GoogleSignInButton disabled={busy} /></div>
+      <p className='mt-3 text-center text-xs text-muted-foreground' data-testid='password-auth-divider'>or continue with email and password</p>
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {

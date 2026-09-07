@@ -84,6 +84,21 @@ def clear_session(response: Response) -> None:
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
+async def session_actor(repforge_session=None, authorization=None):
+    bearer = authorization.split(' ', 1)[1].strip() if isinstance(authorization, str) and authorization.lower().startswith('bearer ') else ''
+    for token in (repforge_session, bearer):
+        if not isinstance(token, str) or not token:
+            continue
+        try:
+            claims = jwt.decode(token, _secret(), algorithms=[ALGORITHM])
+        except jwt.PyJWTError:
+            continue
+        user = await db.users.find_one({'id': claims.get('sub')}, {'_id': 0, 'password': 0})
+        if user and claims.get('epoch', 0) == user.get('auth_epoch', 0):
+            return user
+    return None
+
+
 async def current_user(
     repforge_session: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
@@ -105,7 +120,10 @@ async def current_user(
             continue
         user = await db.users.find_one({'id': claims.get('sub')}, {'_id': 0, 'password': 0})
         if user and claims.get('epoch', 0) == user.get('auth_epoch', 0):
-            user = await personal_workspace(user)
+            if user.get('privacy_lock'):
+                raise HTTPException(409, 'Your data is being deleted. Please wait.')
+            if not user.get('workspace_id'):
+                user = await personal_workspace(user)
             membership = await db.memberships.find_one({'workspace_id': user['workspace_id'], 'user_id': user['id'], 'verified': True})
             if not membership:
                 raise HTTPException(403, 'Workspace membership needs verification')

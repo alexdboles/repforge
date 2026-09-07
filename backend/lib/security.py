@@ -75,5 +75,8 @@ async def ensure_indexes():
     await db.simulations.create_index([('user_id', 1), ('status', 1), ('started_at', -1)])
     await db.assignments.create_index([('workspace_id', 1), ('status', 1)])
     await db.evidence_events.create_index([('excluded', 1), ('at', 1), ('event', 1)])
+    await db.oauth_identities.create_index('user_id', unique=True)
+    for collection in ('oauth_flows', 'oauth_codes', 'oauth_recoveries'):
+        await db[collection].create_index('expires_at', expireAfterSeconds=0)
     for collection in ('rate_limits', 'leases', 'audio_cache', 'invitations'):
         await db[collection].create_index('expires_at', expireAfterSeconds=0)

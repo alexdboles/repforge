@@ -11,6 +11,20 @@ export function beginSession(): void {
   localStorage.setItem('repforge.session-change', String(Date.now()));
 }
 
+// Called only AFTER successful server erasure, never instead of server deletion.
+export function clearDeletedSession(): void {
+  clearToken();
+  clearUserId();
+  for (const storage of [localStorage, sessionStorage]) {
+    for (const key of Object.keys(storage)) {
+      if (key.startsWith('repforge.') || key.startsWith('vocalpitch.')) storage.removeItem(key);
+    }
+  }
+  localStorage.setItem('repforge.session-change', String(Date.now()));
+  queryClient.clear();
+  window.location.assign('/?data=deleted');
+}
+
 // Call from every sign-out control; the hard redirect resets all in-memory state.
 export async function endSession(redirectTo: string = "/"): Promise<void> {
   try {

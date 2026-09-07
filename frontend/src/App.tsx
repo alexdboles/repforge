@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
@@ -16,13 +16,27 @@ import VoiceCast from "@/pages/VoiceCast";
 import SampleReport from "@/pages/SampleReport";
 import SessionBoundary from '@/components/SessionBoundary';
 import EvidencePage from '@/pages/Evidence';
+import GoogleCallback from '@/pages/GoogleCallback';
+import Privacy from '@/pages/Privacy';
+import Terms from '@/pages/Terms';
+import Data from '@/pages/Data';
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
+  const location = useLocation();
+  const state = new URLSearchParams(location.search).get('google_state');
+  const fragment = new URLSearchParams(location.hash.replace(/^#/, ''));
+  // Handle managed auth BEFORE SessionBoundary can check an old/absent session.
+  if (fragment.has('session_id') || (location.pathname === '/dashboard' && state)) {
+    return <GoogleCallback state={state} sessionId={fragment.get('session_id')} />;
+  }
   return (
     <>
       <SessionBoundary><Routes>
         <Route path="/" element={<Landing />} />
+        <Route path='/privacy' element={<Privacy />} />
+        <Route path='/terms' element={<Terms />} />
+        <Route path='/data' element={<Data />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/training" element={<Training />} />
         <Route path="/simulation/:id" element={<SimulationPage />} />

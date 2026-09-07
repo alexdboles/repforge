@@ -1,5 +1,51 @@
 # RepForge verification record
 
+## Managed Google sign-in addition — 2026-09-07 UTC
+
+### Follow-up: user never set / does not know a RepForge password
+
+The user reproduced a real existing-account linking dead end. An older matching record
+had a stored password hash, but the user did not have a password to enter. The UI now
+offers account-connection help instead of assuming that stored hash is a known password;
+records with no password never display a password field. Requests require the completed
+Google flow's nonce proof, persist for three days and do not authenticate or link anyone
+by themselves. A private operator can connect the identity only after explicit owner
+approval, with a checksummed backup and before/after account, membership and transcript checks.
+
+Follow-up checks: **11 backend cases passed (6.26 s)**, public API recovery-boundary smoke
+passed, TypeScript passed (1.69 s), browser recovery/approved-connection/no-password-form
+checks passed (8.7 s, zero app errors). Google identities in these automated checks were
+**MOCKED**; real app/DB/session behavior was exercised. No existing password was reset.
+The user's original short-lived Google flow expired before approval, so their actual
+connection still needs a fresh sign-in/recovery reference; it has not been claimed complete.
+
+- `yarn typecheck` passed (1.95 s) for this addition.
+- Public ingress API smoke passed Google initiation/proof rejection, existing password
+  login, real application session validation and protected dashboard access.
+- Focused managed-auth + workspace-security suite: **9 passed**, final retest 4.92 s.
+  External Google identity responses are **MOCKED**; app sessions, linking and Mongo
+  authorization paths are real. No Google passwords or user API keys were requested.
+- Browser callback/logout/guest regression passed (17.1 s, zero app errors).
+- Testing iteration 12 added two passing named browser checks: Google alongside both
+  auth tabs at 390×844 plus same-origin new-tab handling; callback once under StrictMode,
+  temporary URL cleanup, actual backend session, one-time existing-password linking,
+  incorrect-password recovery, preserved profile and logout revocation.
+- **Live provider limitation:** the documented managed-auth URL redirected to `/oauth/`
+  returning HTTP 404; its background asset also returned 404. Independent curl reproduced
+  this and Emergent support identified an upstream platform issue. A rendered crawl
+  reached Google Accounts despite those errors. No real Google account selection/consent
+  or final live identity exchange is claimed. A human test/platform confirmation remains.
+- The first screenshot harness also raced reading the start response with navigation;
+  the corrected controlled-boundary test passed. This was not a production callback defect.
+- Existing preview configuration permits the public origin. Localhost-only browser POSTs
+  require an explicit localhost `CORS_ORIGINS` entry, as in the local environment example;
+  this pass did not change private configuration or deployment.
+
+The managed provider's documented schema has no `email_verified` claim. Automatic
+existing-email linking therefore requires explicit trusted boolean verification when
+available; otherwise a one-time **RepForge** password confirms the existing account.
+Google passwords are never collected by RepForge. This security fallback is intentional.
+
 Prepared from actual tool/test results on **2026-09-07 UTC**. This is a bounded engineering
 verification record, not certification that every possible browser, device or deployment works.
 

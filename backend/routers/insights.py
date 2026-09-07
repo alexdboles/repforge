@@ -237,7 +237,9 @@ async def create_assignment(payload: AssignmentCreate, me: dict = Depends(curren
         note=payload.note,
         assigned_by=me['id'],
     )
-    await db.assignments.insert_one(assignment.model_dump())
+    from lib.data_guard import data_operation
+    async with data_operation(payload.user_id):
+        await db.assignments.insert_one(assignment.model_dump())
     return assignment
 
 

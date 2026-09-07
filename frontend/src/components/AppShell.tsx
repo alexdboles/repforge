@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/profile";
 import type { UserProfile } from "@/lib/types";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import PrivacyLinks from './PrivacyLinks';
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard" },
@@ -114,7 +115,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto max-w-[1400px] px-5 py-8 sm:px-8">{children}</main>
 
       <footer className="border-t border-border py-6 text-center text-[12px] text-muted-foreground">
-        RepForge · Practice the Conversation Before It Counts. · Voice experience powered by ElevenLabs
+        <p data-testid='shell-footer-copy'>RepForge · Practice the Conversation Before It Counts. · AI voice powered by ElevenLabs</p>
+        <div className='mt-4 flex justify-center'><PrivacyLinks prefix='shell-footer' /></div>
       </footer>
     </div>
   );

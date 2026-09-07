@@ -20,11 +20,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import DeleteDataDialog from '@/components/DeleteDataDialog';
 
 export default function History() {
   const userId = getUserId();
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const qc = useQueryClient();
   const abandon = useMutation({ mutationFn: (id: string) => apiPost(`/simulations/${id}/abandon`), onSuccess: () => void qc.invalidateQueries({ queryKey: ['history', userId] }), onError: () => toast.error('Could not abandon this session. Please retry.') });
   const { data, isLoading, isError, refetch } = useQuery({
@@ -155,6 +157,7 @@ export default function History() {
                         <ArrowRight className="size-3.5" />
                       </Link>
                       {['active', 'preparation'].includes(r.status) ? <Button size='xs' variant='ghost' className='ml-2' data-testid={`history-abandon-${r.id}`} disabled={abandon.isPending} onClick={() => abandon.mutate(r.id)}>Abandon</Button> : null}
+                      <Button size='xs' variant='ghost' className='ml-2 text-red-700' data-testid={`history-delete-${r.id}`} onClick={() => setDeleteId(r.id)}>Delete</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -170,6 +173,7 @@ export default function History() {
             No sessions match “{q}”.
           </p>
         ) : null}
+        {deleteId && <DeleteDataDialog scope='session' sessionId={deleteId} onClose={() => setDeleteId(null)} />}
       </div>
     </AppShell>
   );

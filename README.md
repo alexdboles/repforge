@@ -31,6 +31,9 @@ did **not** deploy, publish a repository, push commits or modify the contest sub
   attempts do not masquerade as unaided improvement; a tie is not improvement.
 - Isolated personal/guest workspaces, account-email-bound invitations, manager-only
   team reports/assignments, server-verified sessions and logout revocation.
+- Emergent-managed Google sign-in alongside email/password and guest access. Existing
+  accounts link only with verified provider email evidence or a one-time RepForge
+  password confirmation; their records and workspace permissions remain unchanged.
 - Persistent history, text-derived counts, explicit skill coverage and restricted owner
   usage evidence. No invented adoption, revenue or measured manager-time savings.
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, Flame, LogOut, Trophy, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -133,6 +133,8 @@ export default function Profile() {
             </div>
 
             <div className="mt-6 border-t border-border pt-5">
+              <Link to='/data' data-testid='profile-data-controls' className='mb-4 block text-sm font-semibold text-primary'>Your data & controls →</Link>
+              <p data-testid='profile-signout-disclosure' className='mb-3 text-xs leading-6 text-muted-foreground'>Signing out does not erase stored data. Export or permanently delete it from Data & controls.</p>
               <Button
                 variant="ghost"
                 onClick={() => void endSession()}
@@ -255,10 +257,9 @@ export default function Profile() {
                 Team & manager reporting
               </h2>
               <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-                Every simulation, transcript and competency score is stored against your rep record
-                and organisation, so manager dashboards, skill-gap reporting, assigned exercises and
-                team leaderboards roll straight out of the existing data model. Not enabled in this
-                individual-seller release.
+                Verified workspace managers can view team performance and assign exercises.
+                Membership requires a matching-email invitation—not a shared organisation name.
+                Your personal export and deletion controls remain private to you.
               </p>
             </section>
           </div>

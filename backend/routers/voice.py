@@ -221,7 +221,7 @@ async def _cached_audio(owner, voice, text, difficulty):
         audio = await _synthesize(voice, text, settings)
         if len(audio) > 8_000_000:
             raise HTTPException(502, 'Voice response exceeded the safe size limit')
-        await db.audio_cache.replace_one({'_id': cache_id}, {'audio': audio,
+        await db.audio_cache.replace_one({'_id': cache_id}, {'audio': audio, 'user_id': owner,
             'expires_at': datetime.now(timezone.utc) + timedelta(days=1)}, upsert=True)
         return audio
 

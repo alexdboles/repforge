@@ -15,6 +15,7 @@ from lib.auth import (
 )
 from lib.security import client_address
 from lib.db import db
+from lib.data_guard import data_operation
 from models.schemas import LoginRequest, SessionResponse, SignupRequest, UserProfile
 
 router = APIRouter(tags=["auth"], prefix="/auth")
@@ -77,8 +78,9 @@ async def login(payload: LoginRequest, request: Request, response: Response):
     doc = await db.users.find_one({"email": email}, {"_id": 0})
     if not doc or not verify_password(payload.password, doc.get("password", "")):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
-    doc = await personal_workspace(doc)
-    return SessionResponse(user=_profile(doc), token=await issue_session(response, doc["id"]))
+    async with data_operation(doc['id']):
+        doc = await personal_workspace(doc)
+        return SessionResponse(user=_profile(doc), token=await issue_session(response, doc["id"]))
 
 
 @router.post("/guest", response_model=SessionResponse)

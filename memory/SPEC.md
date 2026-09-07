@@ -1,5 +1,83 @@
 # RepForge — Voice-First AI Sales Academy
 
+## Privacy and data controls (current feature)
+Public `/privacy`, `/terms`, `/data` describe actual storage, essential browser state,
+provider boundaries, guest persistence, known Google handoff issue and absence of
+billing. Profile/footer links reach real JSON export and typed-confirmation permanent
+erasure. `GET /api/data/summary|export` and `DELETE /api/data/account|guest|sessions/{id}`
+derive identity from the current session; deletion requires `?confirm=DELETE`.
+Account/guest erasure removes owned Mongo records, linked OAuth data, generated speech,
+feedback, minimal analytics and memberships without deleting another user's records.
+Session erasure includes descendant retries/drills, copied prior memory, feedback and
+audio. XP from deleted calls is removed and streak resets. Exports recursively omit
+secrets, hashes and sign-in proofs. Activity guards prevent new writes racing erasure;
+busy accounts return retryable 409. Browser storage/query cache clear only after the
+server confirms erasure. Guest IDs alone never authorise access.
+Existing email/password, verified workspace roles and guest flows remain; no new auth
+roles or credentials are required. Distress/self-harm prompt priority overrides buyer
+roleplay and excludes disclosures from coaching evidence; this is prompt-level safety,
+not automatic hang-up, medical support or guaranteed detection.
+Implementation, cleanup dry-runs, retention limits, failure recovery and provider sources
+are documented in `/app/PRIVACY_AND_DATA.md`. No scheduled guest cleanup, provider
+zero-retention claim, backup purge promise or fabricated privacy contact. Real-user
+records and backups are not bulk-deleted.
+Verification: tier-one gate passed clean. `yarn typecheck` passed; the public-preview
+curl suite passed 17 requests plus real Mongo assertions for recursive session erasure,
+legacy/current audio removal, account and guest erasure, secret-free JSON export,
+cross-account denial, confirmation/type gates, in-flight exclusion and revoked sessions.
+The public browser journey passed: public notices → live UI-created demo → actual JSON
+download → cancel/confirm session deletion → empty History → guest erase → cleared
+browser session → public mobile Data page. No console/runtime/HTTP errors in the browser
+flow. Only disposable fixtures were deleted. Safety was verified structurally for prompt
+priority across five difficulties; live distress response quality and physical microphone
+behaviour were not tested in this privacy pass. Google identity fixtures were synthetic;
+the live Google handoff remains blocked upstream. No testing-subagent escalation was
+needed after this clean gate. Browser script/results: screenshot_tool_ts-20260907_163008_803.spec.ts
+under `.emergent/scripts/adhoc/`; screenshots in `/root/.emergent/automation_output/20260907_163008/`.
+
+## Emergent-managed Google sign-in
+Password confusion recovery: when a legacy record matches, the UI no longer assumes
+the user created or knows its stored password. Passwordless records never show a
+password form; all linking users can select "I never set or don't know that password".
+An authenticated, nonce-bound Google flow can save a three-day `oauth_recoveries`
+request, with a non-secret reference and explicit "no email sent" disclosure. Saving
+a request does not link accounts, grant permissions, reset passwords or expose history.
+An authorised private operator can approve only after explicit account-owner confirmation,
+using `backend/scripts/approve_google_link.py REFERENCE`. It backs up original records,
+creates a provider binding and verifies account fields, memberships and transcripts stay
+unchanged. Subsequent Google sign-ins then need no RepForge password. No public approve
+endpoint or email-only automatic takeover path is introduced.
+Follow-up verification: 11 backend tests, public recovery API negative checks, TypeScript
+and 8.7-second browser approved-recovery/no-password-form flow passed. Test Google
+identities were MOCKED; real records/sessions exercised. The real user explicitly
+authorised connecting the matching pending identity, but that ten-minute request
+expired before execution. No real-user binding has been created yet; request a fresh
+Google sign-in/recovery reference before applying the authorised private action.
+Google is an additional option inside the existing sign-in/signup panel; the demo stays
+primary and password/guest authentication remains unchanged. The redirect is derived
+from the current browser origin, returning to `/dashboard?google_state=…#session_id=…`.
+Callback detection uses reactive router location before the session boundary. A
+10-minute server-issued state and tab-held verifier bind initiation to the callback;
+temporary fragments are immediately removed and duplicate StrictMode exchanges suppressed.
+Server-only exchange uses Emergent's managed session-data endpoint. Only a trusted
+explicit boolean `email_verified=true` permits automatic matching-email linking.
+Because the documented provider response omits that claim, matching existing password
+accounts normally confirm their RepForge password once. Subsequent sign-ins use the
+stored provider identity binding. New Google accounts have isolated personal workspaces.
+No existing profile, password, transcript, role, workspace or XP is replaced on linking.
+`oauth_flows`/`oauth_codes` have TTLs; identity bindings are unique. Code reuse across
+flows is rejected; cached completion cannot restore a session revoked by logout.
+Provider session tokens are not stored or sent to the browser; RepForge's existing
+HttpOnly JWT + 12-hour tab-scoped preview bearer and auth epoch are reused.
+Embedded previews offer opening the app in a new tab for Google's account picker.
+No new Google client secret, app deployment, provider model change or voice lifecycle
+change is part of this feature. See `auth_testing.md` for the managed testing contract.
+Verification: 9 backend cases passed, TypeScript passed, controlled callback/linking,
+logout, guest, mobile and embedded-new-tab browser checks passed (iteration12). Real
+managed site handoff returned upstream `/oauth/` and background-asset404s; a rendered
+crawl still reached Google Accounts. Support confirmed upstream issue. Human real
+Google consent/return remains unverified; do not call the full live flow verified.
+
 ## Hardening pass (supersedes historical entries below)
 Workspace privacy uses immutable workspace IDs plus verified membership records,
 never `org`. All 662 pre-existing accounts were isolated into personal workspaces

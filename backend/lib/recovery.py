@@ -3,6 +3,8 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from lib.db import db
+from lib.data_guard import data_operation
+from fastapi import HTTPException
 
 
 async def recover_once():
@@ -16,7 +18,12 @@ async def recover_once():
         }}])
     from routers.simulations import _commit_rewards
     async for sim in db.simulations.find({'status': 'completed', 'rewards_pending': True}):
-        await _commit_rewards(sim)
+        try:
+            async with data_operation(sim['user_id']):
+                if await db.simulations.find_one({'id': sim['id'], 'rewards_pending': True}):
+                    await _commit_rewards(sim)
+        except HTTPException:
+            continue
 
 
 async def recovery_loop():
