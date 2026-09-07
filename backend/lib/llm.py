@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 from dotenv import load_dotenv
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from openai import AsyncOpenAI
 
 from lib.catalog import SKILL_CATEGORIES
 from lib.security import provider_budget
@@ -32,18 +32,40 @@ def _credential() -> tuple[str, str, str]:
     """The rep's own OpenAI key wins; the Emergent universal key is the fallback."""
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if openai_key:
-        return openai_key, "openai", OPENAI_MODEL
+        return openai_key, "openai", os.environ.get("OPENAI_MODEL", OPENAI_MODEL)
     key = os.environ.get("EMERGENT_LLM_KEY", "").strip()
     if not key:
         raise LlmUnavailable(
-            "No LLM credential is configured in backend/.env (OPENAI_API_KEY or "
-            "EMERGENT_LLM_KEY) — the AI prospect and coaching engine require one."
+            "AI practice is not configured on this server yet. Please contact the app owner or try again later."
         )
     return key, MODEL_PROVIDER, MODEL_NAME
 
 
-def _chat(session_id: str, system_message: str) -> LlmChat:
+@dataclass
+class DirectChat:
+    key: str
+    model: str
+    instructions: str
+
+    async def send(self, prompt: str) -> str:
+        # No automatic retries: each application attempt reserves its own budget.
+        async with AsyncOpenAI(api_key=self.key, max_retries=0, timeout=80) as client:
+            response = await client.responses.create(
+                model=self.model, instructions=self.instructions, input=prompt, store=False,
+            )
+        if response.status != 'completed' or not response.output_text.strip():
+            raise LlmUnavailable('The model did not return a complete response. Please retry.')
+        return response.output_text
+
+
+def _chat(session_id: str, system_message: str):
     key, provider, model = _credential()
+    if provider == 'openai':
+        return DirectChat(key, model, system_message)
+    try:
+        from emergentintegrations.llm.chat import LlmChat
+    except ImportError as exc:
+        raise LlmUnavailable('Emergent integration is not installed. Configure OPENAI_API_KEY for standalone use.') from exc
     return LlmChat(
         api_key=key, session_id=session_id, system_message=system_message
     ).with_model(provider, model)
@@ -53,6 +75,9 @@ async def _send(chat, prompt: str):
     await provider_budget('llm')
     started = time.monotonic()
     try:
+        if isinstance(chat, DirectChat):
+            return await asyncio.wait_for(chat.send(prompt), timeout=85)
+        from emergentintegrations.llm.chat import UserMessage
         return await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=85)
     finally:
         logging.getLogger(__name__).info('llm request latency_ms=%d', int((time.monotonic() - started) * 1000))

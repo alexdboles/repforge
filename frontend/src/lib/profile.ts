@@ -6,38 +6,42 @@ const KEY = "vocalpitch.user_id";
 // as an Authorization header.
 const TOKEN_KEY = "vocalpitch.session_token";
 
+// Keep storage failures independent: blocked localStorage must not prevent
+// reading or clearing the tab's session token. Never persist new tokens locally.
+function removeStoredToken(storage: 'sessionStorage' | 'localStorage') {
+  try { window[storage].removeItem(TOKEN_KEY); } catch { /* Storage may be disabled. */ }
+}
+
 export function getToken(): string | null {
+  let token: string | null = null;
+  try { token = sessionStorage.getItem(TOKEN_KEY); } catch { /* Cookie still works. */ }
+  if (!token) {
+    try { token = localStorage.getItem(TOKEN_KEY); } catch { /* No legacy token. */ }
+  }
+  if (!token) return null;
   try {
-    const token = sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
-    if (token) {
-      const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp: number };
-      if (claims.exp * 1000 <= Date.now()) { clearToken(); return null; }
-      sessionStorage.setItem(TOKEN_KEY, token);
-      localStorage.removeItem(TOKEN_KEY);
+    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp) || claims.exp * 1000 <= Date.now()) {
+      clearToken();
+      return null;
     }
-    return token;
-  } catch (err) {
-    console.error("localStorage read failed", err);
+  } catch {
+    clearToken();
     return null;
   }
+  try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* Cookie remains primary. */ }
+  removeStoredToken('localStorage');
+  return token;
 }
 
 export function setToken(token: string): void {
-  try {
-    sessionStorage.setItem(TOKEN_KEY, token);
-    localStorage.removeItem(TOKEN_KEY);
-  } catch (err) {
-    console.error("localStorage write failed", err);
-  }
+  try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* Cookie remains primary. */ }
+  removeStoredToken('localStorage');
 }
 
 export function clearToken(): void {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-  } catch (err) {
-    console.error("localStorage write failed", err);
-  }
+  removeStoredToken('localStorage');
+  removeStoredToken('sessionStorage');
 }
 
 export function getUserId(): string | null {

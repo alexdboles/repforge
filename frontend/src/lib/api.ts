@@ -31,7 +31,7 @@ export function authHeaders(): Record<string, string> {
 
 export interface RequestOptions { signal?: AbortSignal; timeoutMs?: number; binary?: boolean }
 async function request<T>(method: string, path: string, body?: JsonBody, options: RequestOptions = {}): Promise<T> {
-  // Auth rides the httpOnly session cookie automatically — never add auth headers here.
+  // Prefer the httpOnly cookie, with a short-lived bearer fallback for blocked cookies.
   const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 120000)]) : AbortSignal.timeout(options.timeoutMs ?? 120000);
   const res = await fetch(`${BASE}${path}`, {
     signal,

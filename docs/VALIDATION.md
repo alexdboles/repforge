@@ -1,3 +1,5 @@
+> Historical Emergent notes below. Latest checks: [GitHub review](GITHUB_REVIEW.md).
+
 # RepForge verification record
 
 ## Managed Google sign-in addition — 2026-09-07 UTC

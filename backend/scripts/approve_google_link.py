@@ -47,7 +47,7 @@ async def approve(reference: str):
     target_id = record.get('user_id') or record.get('link_user_id')
     if target_id and target_id != uid:
         raise SystemExit('The account associated with this request changed. No changes made.')
-    folder = Path('/app/checkpoints') / ('google-link-approved-' + now.strftime('%Y%m%dT%H%M%S%f'))
+    folder = (Path(__file__).resolve().parents[2] / 'checkpoints') / ('google-link-approved-' + now.strftime('%Y%m%dT%H%M%S%f'))
     folder.mkdir(mode=0o700, parents=True, exist_ok=False)
     manifest = {}
     selectors = {'users': {'id': uid}, 'memberships': {'user_id': uid},

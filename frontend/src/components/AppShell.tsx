@@ -1,9 +1,6 @@
+import { useCurrentUser } from "@/lib/use-current-user";
 import { Link, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { Flame, Headphones, Zap } from "lucide-react";
-import { apiGet } from "@/lib/api";
-import { getUserId } from "@/lib/profile";
-import type { UserProfile } from "@/lib/types";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import PrivacyLinks from './PrivacyLinks';
@@ -17,16 +14,6 @@ const NAV = [
   { to: "/history", label: "History" },
   { to: "/profile", label: "Profile" },
 ];
-
-export function useCurrentUser() {
-  const id = getUserId();
-  return useQuery({
-    queryKey: ["user", id],
-    queryFn: () => apiGet<UserProfile>('/auth/me'),
-    enabled: Boolean(id),
-    retry: false,
-  });
-}
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();

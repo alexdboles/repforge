@@ -45,6 +45,14 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+def cookie_policy():
+    secure = os.environ.get('COOKIE_SECURE', 'true').lower() == 'true'
+    same_site = os.environ.get('COOKIE_SAMESITE', 'none').lower()
+    if same_site not in ('lax', 'strict', 'none') or (same_site == 'none' and not secure):
+        raise HTTPException(503, 'Invalid session cookie configuration')
+    return {'secure': secure, 'samesite': same_site}
+
+
 async def issue_session(response: Response, user_id: str) -> str:
     """Set the session cookie and also hand the token back to the caller.
 
@@ -72,8 +80,7 @@ async def issue_session(response: Response, user_id: str) -> str:
         COOKIE_NAME,
         cookie_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        **cookie_policy(),
         max_age=SESSION_DAYS * 24 * 3600,
         path="/",
     )
@@ -81,7 +88,7 @@ async def issue_session(response: Response, user_id: str) -> str:
 
 
 def clear_session(response: Response) -> None:
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(COOKIE_NAME, path="/", httponly=True, **cookie_policy())
 
 
 async def session_actor(repforge_session=None, authorization=None):

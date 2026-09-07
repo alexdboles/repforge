@@ -65,8 +65,14 @@ export function useMic(onUtterance: (text: string) => void) {
     wantRef.current = false;
     setListening(false);
     setInterim("");
-    recRef.current?.abort();
+    const rec = recRef.current;
     recRef.current = null;
+    if (rec) {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      rec.abort();
+    }
   }, []);
 
   const start = useCallback(() => {
@@ -216,6 +222,7 @@ export function useProspectVoice(character = "", persona = "default", difficulty
       const gen = genRef.current + 1;
       genRef.current = gen;
       setError(null);
+      setSpeaking(false);
       setPhase("loading");
       const ctrl = new AbortController();
       abortRef.current = ctrl;

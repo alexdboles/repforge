@@ -77,7 +77,8 @@ async def test_more_than_500_and_order_independent():
 
 
 @pytest.mark.asyncio(loop_scope='session')
-async def test_one_bounded_repair_without_relaxing_validation():
+async def test_one_bounded_repair_without_relaxing_validation(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "mock-provider-not-a-real-key")
     from routers.simulations import _validated_evaluation
     from lib.llm import EvalRequest
     req = EvalRequest('internal', {}, {}, {}, TRANSCRIPT, 0)

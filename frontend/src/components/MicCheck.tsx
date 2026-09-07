@@ -10,15 +10,6 @@ const SESSION_FLAG = "repforge.audio_verified";
 type MicState = "idle" | "asking" | "listening" | "heard" | "denied";
 type VoiceState = "idle" | "loading" | "ready" | "failed" | 'confirm';
 
-export function audioAlreadyVerified(): boolean {
-  try {
-    return false; // Every call confirms its own saved buyer voice; skipping never verifies.
-  } catch (err) {
-    console.error("sessionStorage read failed", err);
-    return false;
-  }
-}
-
 function markVerified() {
   try {
     sessionStorage.setItem(SESSION_FLAG, "1");
@@ -33,7 +24,6 @@ function markVerified() {
  * graded simulation only starts when "Start simulation" is pressed. */
 export default function MicCheck({
   prospectName,
-  difficulty,
   simulationId,
   onStart,
   busy = false,
@@ -127,7 +117,7 @@ export default function MicCheck({
       if (gen !== voiceGeneration.current || ctrl.signal.aborted) return;
       setVoiceState("failed");
     }
-  }, [prospectName, difficulty, simulationId]);
+  }, [simulationId]);
 
   const ready = micState === 'heard' && voiceState === 'ready' && speechSupported();
 

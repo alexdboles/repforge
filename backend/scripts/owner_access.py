@@ -14,7 +14,7 @@ async def main(uid):
     user = await db.users.find_one({'id': uid, 'is_guest': {'$ne': True}})
     if not user:
         raise SystemExit('Existing non-guest account required')
-    folder = Path('/app/checkpoints')
+    folder = (Path(__file__).resolve().parents[2] / 'checkpoints')
     folder.mkdir(mode=0o700, exist_ok=True)
     path = folder / f'owner-before-{uid}.bson'
     if not path.exists():

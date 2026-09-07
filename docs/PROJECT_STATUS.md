@@ -1,3 +1,5 @@
+> Historical Emergent notes below. Latest checks: [GitHub review](GITHUB_REVIEW.md).
+
 # RepForge project status
 
 ## Implemented and verified within the documented scope

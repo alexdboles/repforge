@@ -29,7 +29,7 @@ async def main():
         assert result.status_code == 200
         payload = result.json()
         await db.users.update_one({'id': payload['session']['user']['id']}, {'$set': {'is_internal': True}})
-        output = Path('/app/checkpoints/google-browser-fixture.json')
+        output = (Path(__file__).resolve().parents[2] / 'checkpoints' / 'google-browser-fixture.json')
         output.parent.mkdir(mode=0o700, exist_ok=True)
         fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w') as stream:

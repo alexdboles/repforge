@@ -74,7 +74,7 @@ export default function Dashboard() {
         <Link
           to="/sample-report"
           data-testid="sample-report-card"
-          className={cn('mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card p-5 transition-colors hover:border-slate-300', hasData && 'order-11')}
+          className={cn('mt-4 flex flex-col items-stretch gap-4 rounded-xl sm:flex-row sm:items-center border border-border bg-card p-5 transition-colors hover:border-slate-300', hasData && 'order-11')}
         >
           <div className="min-w-0 flex-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -530,7 +530,7 @@ function DemoLaunch() {
 
   return (
     <section
-      className="mt-6 flex flex-wrap items-center gap-5 rounded-xl border border-[#1E293B] bg-[#0F172A] p-6 text-slate-100"
+      className="mt-6 flex flex-col items-stretch gap-5 rounded-xl sm:flex-row sm:items-center border border-[#1E293B] bg-[#0F172A] p-6 text-slate-100"
       data-testid="demo-launch-card"
     >
       <div className="min-w-0 flex-1">

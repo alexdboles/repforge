@@ -14,9 +14,9 @@ evidence-linked coaching → retry a specific moment → review separate practic
 - **Updated build verified here:** [RepForge preview](https://prospect-practice.preview.emergentagent.com)
 - **Release status:** [Project status](docs/PROJECT_STATUS.md) · [Validation](docs/VALIDATION.md)
 
-The live domain was reachable during this pass but displayed the older landing page.
-The improvements and screenshots below were verified on the preview. This preparation
-did **not** deploy, publish a repository, push commits or modify the contest submission.
+This repository is the maintained source version. The Emergent deployment is separate;
+pushing code here does not publish it to the live app. See [GitHub review](docs/GITHUB_REVIEW.md)
+for the latest local checks and remaining release work.
 
 ### Implemented and checked
 
@@ -65,63 +65,66 @@ claim the code was written entirely by hand or invent contributor/ownership deta
 
 ```
 repforge/
-  backend/   FastAPI + motor (async MongoDB) + Pydantic v2 — python, /root/.venv
+  backend/   FastAPI + motor (async MongoDB) + Pydantic v2 — Python
   frontend/  Vite + React 19 + Tailwind v4 + shadcn/ui (TypeScript strict)
   tests/     Playwright e2e workspace (pre-scaffolded)
   docs/      Demo, architecture, validation, project status and real screenshots
   scripts/   Read-only public-release audit and documentation checks
 ```
 
-## Running
+## Running locally
 
-### Local prerequisites and dependencies
-
-The inspected environment used Python **3.11.16**, Node **24.19.0**, Yarn **1.22.22**
-and MongoDB **7.0.42**. These are observed versions, not a claim that every other version
-is unsupported. Use a separate local database, never the deployed application's database.
+Use Python 3.12, Node 24 and a separate MongoDB database. Do not connect tests to
+production. The reviewed installation used macOS with MongoDB 8.0.
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r backend/requirements.txt
+python -m pip install -r backend/requirements-lock.txt
+cp backend/.env.example backend/.env
 cd frontend
-yarn install --frozen-lockfile
+npm ci
 cd ..
 ```
 
-The backend dependency dry-run passed in the existing environment. A completely clean
-machine installation has not been executed. `emergentintegrations` uses Emergent's package
-distribution and a wheel dependency; public availability and redistribution terms must
-be checked before claiming a standalone installation experience outside Emergent.
-The inspected pod used an additional package index; no private credentials belong in
-this repository. See [validation](docs/VALIDATION.md) for the exact limits of this check.
+Set `JWT_SECRET` in your private `backend/.env` to a random value generated with
+`python -c "import secrets; print(secrets.token_urlsafe(48))"`. Do not commit it.
+Set `MONGO_URL` and `DB_NAME` for your local database.
 
-Copy `backend/.env.example` to **private** `backend/.env` on your own machine, and set:
+For real AI practice, set `OPENAI_API_KEY`; the standard OpenAI SDK runs independently
+of Emergent. `OPENAI_MODEL` defaults to the existing `gpt-5.4` selection. Set
+`ELEVENLABS_API_KEY` for prospect audio. Missing providers produce an error; they do not
+silently substitute fictional results. No provider keys belong in frontend files.
 
-| Variable | Purpose |
-| --- | --- |
-| `MONGO_URL`, `DB_NAME` | Your separate local MongoDB and database |
-| `JWT_SECRET` | A privately generated random secret of at least 32 bytes; replace the template marker |
-| `CORS_ORIGINS` | Explicit allowed browser origins; local example is `http://localhost:3000` |
-| `OPENAI_API_KEY` **or** `EMERGENT_LLM_KEY` | Server-only buyer/coaching provider; leave unused keys blank |
-| `ELEVENLABS_API_KEY` | Server-only spoken buyer output |
-| `COOKIE_SECURE`, `COOKIE_SAMESITE` | Local example uses HTTP-compatible values; HTTPS previews/production require a secure policy |
-| `TRUSTED_PROXY_CIDRS` | Leave empty unless the actual trusted proxy boundary is known |
-| `DAILY_LLM_REQUEST_LIMIT`, `DAILY_TTS_CHARACTER_LIMIT` | Shared reservation caps, not exact dollar budgets |
+To use an Emergent universal key instead, install `backend/requirements-emergent.txt`
+using the package index supplied by that environment and set `EMERGENT_LLM_KEY`.
+The standard public installation does not need the Emergent integration package.
+Google sign-in still depends on Emergent's managed identity service; local password
+and guest access are independent of it.
 
-Never paste credentials into chat, README files, screenshots or test output. There are
-no required frontend environment variables: `frontend/.env.example` is intentionally empty.
-The browser always calls relative `/api` paths; never put provider keys in `VITE_*` values.
-
-Start your own MongoDB using your OS's supported service procedure, then run:
-
-Two separate processes, managed by supervisor in the pod (see "Pod conventions"
-below); to run them by hand from two terminals instead:
+Start MongoDB, then run these in **separate terminals**, both starting at the project root:
 
 ```bash
-cd backend && uvicorn server:app --host 0.0.0.0 --port 8001 --reload   # http://localhost:8001
-cd frontend && yarn dev                                                # http://localhost:3000
+# Terminal 1, with the virtual environment activated
+cd backend
+uvicorn server:app --host 127.0.0.1 --port 8001
 ```
+
+```bash
+# Terminal 2
+cd frontend
+DISABLE_VISUAL_EDITS=true npm run dev -- --host 127.0.0.1
+```
+
+Open the local address printed by Vite, usually `http://localhost:3000`.
+Vite proxies `/api` to port 8001 and preserves the browser's host for origin checking.
+The environment template enables HTTP-compatible local cookies. For an HTTPS deployment,
+use `COOKIE_SECURE=true`; use `COOKIE_SAMESITE=none` only with secure cookies if embedding
+requires it. Configure explicit `CORS_ORIGINS` for cross-origin clients.
+
+Other settings: `TRUSTED_PROXY_CIDRS` (only actual trusted proxies),
+`DAILY_LLM_REQUEST_LIMIT` and `DAILY_TTS_CHARACTER_LIMIT` (shared reservation ceilings,
+not dollar budgets). Provider requests are charged by their providers.
 
 ## The `/api` proxy convention
 
@@ -223,98 +226,54 @@ TanStack Query is wired: `QueryClientProvider` in `src/main.tsx`. Use
 `useQuery`/`useMutation`, not
 fetch-in-`useEffect`.
 
-## Completion gate (tier 1)
-
-When the build is complete, run tier 1 once, all in the same turn: a curl smoke
-over the key `/api` endpoints (assert status AND a response field, plus one
-negative case), `cd frontend && yarn typecheck`, and ONE happy-path browser pass
-through the core user journey. Clean on all three → finish; any failure is a real
-bug — fix it, re-run the failed check, and escalate to the testing subagent.
-No routine typecheck/lint/smoke passes during the build — tier 1 runs exactly once.
-
-
-## Testing
-
-Two lanes.
-
-**Backend (pytest)** — specs in `backend/tests/` as `test_*.py`, run with:
-
-```bash
-cd backend
-python -m pytest -q tests/test_hardening_*.py
-```
-
-This focused suite uses controlled accounts and **MOCKED provider outcomes**. It needs
-your configured local MongoDB. Never run it against a customer database. The broader
-legacy `test_tscheck_*` suite includes live API/provider flows, is not the default
-portfolio check, can consume credits and was not certified as a complete clean suite.
-
-Frontend commands actually exercised in this project:
+## Verification
 
 ```bash
 cd frontend
-yarn typecheck
-yarn vite build
-yarn lint
+npm run build
+npm run lint
+npm test
+cd ../backend
+python -m pytest -q tests/test_hardening_*.py tests/test_google_auth.py tests/test_standalone.py
 ```
 
-Read-only release hygiene check from the repository root:
+The backend tests require local MongoDB and a configured `JWT_SECRET`. Provider responses
+are mocked in this focused suite; no paid calls are required. The broader `test_tscheck_*`
+files exercise live providers and are not the default check. The pytest configuration uses
+two workers. A ready-to-enable GitHub Actions workflow is in `docs/automation/checks.yml`.
+Move it to `.github/workflows/checks.yml` using an account with workflow permission
+to run these checks on each push/PR. The current connection cannot create workflows.
+
+With the local backend running, the privacy smoke script verifies actual HTTP responses
+and MongoDB deletion/isolation postconditions using disposable records:
+
+```bash
+# From backend/, using the same database environment as the server
+python tests/privacy_curl_smoke.py http://127.0.0.1:8001
+```
+
+From the repository root:
 
 ```bash
 python scripts/public_release_audit.py
-python scripts/check_portfolio_docs.py
+python scripts/check_portfolio_docs.py  # requires Pillow for screenshot integrity
 ```
 
-`backend/pytest.ini` is canonical: `addopts = -n 2 --dist loadscope` (pytest-xdist,
-already parallel — do not pass your own `-n`) and `asyncio_mode = auto` (so
-`async def test_...` needs no marker). Serial is `-n 0`, **never**
-`-p no:xdist` (that errors, because `addopts` still passes `-n`/`--dist`).
-`backend/tests/conftest.py` is pre-scaffolded — a sync `client` fixture
-(`httpx.Client` rooted at `/api`), an async `aclient`, and an `api_url()` helper,
-all pointed at `BACKEND_URL` (default `http://localhost:8001`). Tests hit the
-live uvicorn process, so the app under test is the one the browser sees. Add
-app-specific fixtures below the marker; do not re-create the file.
+The frontend lockfile supports `npm ci`; `backend/requirements-lock.txt` records the
+reviewed public Python environment. Refresh locks deliberately when updating dependencies.
+Three lint warnings in shared UI component exports concern development hot refresh.
 
-**Frontend (Playwright)** — `/app/tests/` is pre-scaffolded:
-`playwright.config.ts` (canonical — edit the marked lines only),
-`fixtures/helpers.ts`, and a `package.json` that resolves
-`@playwright/test@1.62.0` (node_modules baked into the image). Write specs into
-`tests/e2e/`. Do NOT re-create the config/helpers or install/upgrade playwright —
-matching Chromium browsers live at `/pw-browsers`.
+## Release notes and limits
 
-The backend lane is pytest: this template's backend is Python, so `vitest` does
-not apply to it.
+Read [GitHub review](docs/GITHUB_REVIEW.md), [architecture](docs/ARCHITECTURE.md), and the
+[demo guide](docs/DEMO_GUIDE.md). Older validation notes describe historical Emergent runs;
+they do not establish live provider readiness for this checkout.
 
-## Pod conventions
+Real Google sign-in, paid AI responses, ElevenLabs playback, and physical microphone
+quality need deployment-specific verification. Data export/deletion does not erase
+provider-held copies, downloaded exports, or operator backups. No automatic guest purge,
+self-service password recovery, billing, or production uptime monitoring is claimed.
 
-This template runs under supervisord in the Emergent agent pod — supersedes any
-local-run instructions above.
-
-- Backend, frontend, and `mongod` are supervisor programs in Emergent. Ordinary code
-  edits hot-reload. Only after dependency or environment changes, restart and poll:
-
-  ```bash
-  sudo supervisorctl restart frontend backend
-  until curl -sf -o /dev/null http://localhost:3000; do sleep 2; done
-  ```
-
-- Status, only after a restart you triggered:
-  `sudo supervisorctl status frontend backend`. Logs:
-  `/var/log/supervisor/backend.err.log`, `backend.out.log`,
-  `frontend.err.log`.
-- App in a browser: the pod's preview URL (frontend, port `3000`). Backend API
-  directly at port `8001`.
-- `mongod` runs locally in the pod (`--bind_ip_all`); `MONGO_URL` in
-  `backend/.env` points at `localhost`, no separate Mongo container.
-- Both dev servers hot-reload on file edits (uvicorn `--reload` for the backend,
-  Vite HMR for the frontend); no rebuild step needed for normal iteration. A
-  restart is still needed after changing `.env`, `requirements.txt`, or
-  `vite.config.ts`.
-
-## Portfolio release and licensing
-
-Use [PORTFOLIO_CHECKLIST.md](PORTFOLIO_CHECKLIST.md) before any public release.
-Ignored files already tracked in Git remain in its history; internal reports and
-platform files need manual review. No Git publication or history rewrite was performed.
-No project licence or ownership declaration has been invented. The owner must choose
-licensing and review dependency, font, provider and voice usage terms before publication.
+This repository remains private. Use [PORTFOLIO_CHECKLIST.md](PORTFOLIO_CHECKLIST.md)
+before making it public: historical internal artifacts need review even if ignored today.
+No license or ownership declaration has been invented; the owner chooses licensing.
