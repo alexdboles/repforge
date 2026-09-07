@@ -240,9 +240,8 @@ python -m pytest -q tests/test_hardening_*.py tests/test_google_auth.py tests/te
 The backend tests require local MongoDB and a configured `JWT_SECRET`. Provider responses
 are mocked in this focused suite; no paid calls are required. The broader `test_tscheck_*`
 files exercise live providers and are not the default check. The pytest configuration uses
-two workers. A ready-to-enable GitHub Actions workflow is in `docs/automation/checks.yml`.
-Move it to `.github/workflows/checks.yml` using an account with workflow permission
-to run these checks on each push/PR. The current connection cannot create workflows.
+two workers. GitHub Actions runs these checks on each push and pull request via
+`.github/workflows/checks.yml`.
 
 With the local backend running, the privacy smoke script verifies actual HTTP responses
 and MongoDB deletion/isolation postconditions using disposable records:

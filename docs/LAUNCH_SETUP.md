@@ -8,7 +8,7 @@ These features are implemented in source. They are not automatically deployed by
 - Verified support and privacy contact addresses (one address may serve both).
 - An email provider with authenticated SMTP STARTTLS on port 587 and a verified sender/domain.
 - Destination for uptime alerts and an uptime-monitoring account.
-- GitHub workflow permission to activate the supplied automated checks.
+- GitHub workflow permission is configured; automated checks are enabled.
 
 Never put SMTP credentials, provider keys or reset links in GitHub or chat.
 
@@ -42,9 +42,8 @@ the live domain until the endpoint has been deployed. No background schedule was
 
 ## GitHub checks
 
-Move `docs/automation/checks.yml` to `.github/workflows/checks.yml` after granting
-the GitHub connection workflow permission. It runs build, lint, frontend tests and
-36 focused backend tests with a disposable MongoDB service, without provider keys.
+The active workflow is `.github/workflows/checks.yml`. It runs build, lint, frontend
+tests and 36 focused backend tests with a disposable MongoDB service, without provider keys.
 
 ## Final deployment checks
 

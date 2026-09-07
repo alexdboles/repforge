@@ -51,9 +51,8 @@ This is a maintenance review, not a penetration test or live deployment certific
 No Emergent deployment was triggered. Future Emergent exports should be merged and
 reviewed rather than overwrite this maintained source.
 
-The current GitHub token lacks workflow permission. Automation is supplied in
-`docs/automation/checks.yml` and is not active until moved to `.github/workflows/checks.yml`
-using an account with that permission. All reported checks above ran locally.
+GitHub workflow permission is now configured and `.github/workflows/checks.yml`
+is enabled for pushes and pull requests.
 
 ## Follow-up additions
 
