@@ -22,6 +22,9 @@ const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const Data = lazy(() => import("@/pages/Data"));
 
+const AccountRecovery = lazy(() => import("@/pages/AccountRecovery"));
+const Support = lazy(() => import("@/pages/Support"));
+
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   const location = useLocation();
@@ -35,6 +38,9 @@ export default function App() {
     <>
       <SessionBoundary><Suspense fallback={<p className="p-8" role="status">Loading…</p>}><Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/forgot-password" element={<AccountRecovery key="forgot" />} />
+        <Route path="/reset-password" element={<AccountRecovery key="reset" />} />
+        <Route path="/support" element={<Support />} />
         <Route path='/privacy' element={<Privacy />} />
         <Route path='/terms' element={<Terms />} />
         <Route path='/data' element={<Data />} />

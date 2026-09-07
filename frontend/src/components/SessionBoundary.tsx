@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 export default function SessionBoundary({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const { pathname } = useLocation();
-  const publicPage = ['/', '/sample-report', '/privacy', '/terms', '/data'].includes(pathname);
+  const publicPage = ['/', '/sample-report', '/privacy', '/terms', '/data', '/support', '/forgot-password', '/reset-password'].includes(pathname);
   const session = useQuery({ queryKey: ['session'], queryFn: () => apiGet<UserProfile>('/auth/me'),
     enabled: !publicPage, retry: false, staleTime: 30000 });
   useEffect(() => {

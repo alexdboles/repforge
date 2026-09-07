@@ -69,6 +69,7 @@ def digest(value: str):
 
 async def ensure_indexes():
     await db.users.create_index('id', unique=True)
+    await db.users.create_index('password_reset_hash', sparse=True)
     await db.users.create_index('email', unique=True, partialFilterExpression={'email': {'$type': 'string'}})
     await db.memberships.create_index([('workspace_id', 1), ('user_id', 1)], unique=True)
     await db.simulations.create_index('id', unique=True)

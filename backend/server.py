@@ -47,6 +47,8 @@ async def root():
 
 from routers import (  # noqa: E402
     auth,
+    password_reset,
+    service,
     google_auth,
     curriculum,
     insights,
@@ -61,6 +63,8 @@ from routers import (  # noqa: E402
 )
 
 api_router.include_router(auth.router)
+api_router.include_router(password_reset.router)
+api_router.include_router(service.router)
 api_router.include_router(google_auth.router)
 api_router.include_router(training.router)
 api_router.include_router(users.router)

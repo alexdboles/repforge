@@ -12,7 +12,7 @@ from lib.security import digest, lease
 from models.privacy import DataExport, DeletionResult
 
 OWNED = ('simulations', 'sales_profiles', 'custom_scenarios', 'assignments', 'memberships', 'oauth_identities', 'oauth_recoveries')
-SECRET_FIELDS = {'_id', 'password', 'password_hash', 'auth_epoch', 'token', 'session_token', 'access_token',
+SECRET_FIELDS = {'password_reset_hash', 'password_reset_expires', '_id', 'password', 'password_hash', 'auth_epoch', 'token', 'session_token', 'access_token',
     'refresh_token', 'verifier_hash', 'code_hash', 'flow_id', 'grading_token', 'failed_turn_key', 'request_key',
     'data_operations', 'privacy_lock', 'award_ids', 'is_admin', 'is_internal'}
 LIMITS = [

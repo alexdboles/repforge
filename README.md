@@ -272,7 +272,8 @@ they do not establish live provider readiness for this checkout.
 Real Google sign-in, paid AI responses, ElevenLabs playback, and physical microphone
 quality need deployment-specific verification. Data export/deletion does not erase
 provider-held copies, downloaded exports, or operator backups. No automatic guest purge,
-self-service password recovery, billing, or production uptime monitoring is claimed.
+billing is claimed. Recovery and readiness monitoring are implemented but require
+configuration; see [activation steps](docs/LAUNCH_SETUP.md).
 
 This repository remains private. Use [PORTFOLIO_CHECKLIST.md](PORTFOLIO_CHECKLIST.md)
 before making it public: historical internal artifacts need review even if ignored today.

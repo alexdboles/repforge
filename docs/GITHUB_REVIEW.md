@@ -54,3 +54,10 @@ reviewed rather than overwrite this maintained source.
 The current GitHub token lacks workflow permission. Automation is supplied in
 `docs/automation/checks.yml` and is not active until moved to `.github/workflows/checks.yml`
 using an account with that permission. All reported checks above ran locally.
+
+## Follow-up additions
+
+Password recovery, configurable support/privacy contacts and database readiness monitoring
+are implemented. Activation needs sender/contact settings and an external alert destination.
+See [launch setup](LAUNCH_SETUP.md). Follow-up validation: 36 backend tests, five frontend
+tests and frontend build pass; email delivery is mocked.

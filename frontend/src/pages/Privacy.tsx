@@ -1,3 +1,4 @@
+import SupportContact from '@/components/SupportContact';
 import { Link } from 'react-router-dom';
 import DataLayout from '@/components/DataLayout';
 
@@ -23,7 +24,7 @@ export default function Privacy() {
         <a data-testid='privacy-anthropic-source' href='https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data' target='_blank' rel='noreferrer'>Anthropic retention</a>
         <a data-testid='privacy-elevenlabs-source' href='https://elevenlabs.io/privacy-policy' target='_blank' rel='noreferrer'>ElevenLabs privacy</a>
         <a data-testid='privacy-google-source' href='https://policies.google.com/privacy' target='_blank' rel='noreferrer'>Google privacy</a>
-      </div><p data-testid='privacy-contact-limit' className='mt-5 text-xs leading-6 text-muted-foreground'>A dedicated privacy mailbox and legal operator details have not been published in this build. Do not send sensitive data through an unverified contact channel. The app operator must supply these details before a broader production launch.</p></section>
+      </div><div className="mt-5"><SupportContact /></div></section>
     </div></div>
   </DataLayout>;
 }

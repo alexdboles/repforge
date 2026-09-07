@@ -353,6 +353,7 @@ function AuthPanel() {
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           className="h-11"
         />
+        <Link to='/forgot-password' className='block text-sm text-primary'>Forgot password?</Link>
         <Label htmlFor='auth-password' data-testid='auth-password-label'>Password{mode === 'signup' ? ' (8+ characters, at most 72 UTF-8 bytes)' : ''}</Label>
         <Input
           id='auth-password'
