@@ -1,4 +1,4 @@
-# RepForge
+# RepForge — AI Sales Practice & Coaching
 
 ## Practice the conversation before it counts.
 
