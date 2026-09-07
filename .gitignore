@@ -92,3 +92,26 @@ android-sdk/
 backend/.env
 frontend/.env
 !backend/.env.example
+
+# Private runtime state, backups and internal verification material.
+/checkpoints/
+/memory/
+/test_reports/
+/.screenshots/
+/.emergent/
+/automation_output/
+**/test-results/
+**/playwright-report/
+**/*.bson
+**/*.dump
+**/*.sqlite*
+**/*.bundle
+*.log
+.env.*
+
+# Safe examples and dependency locks may be reviewed for publication.
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+!frontend/yarn.lock
+!tests/yarn.lock

@@ -24,6 +24,7 @@ export default function ReplyComposer({
 }) {
   return (
     <>
+      <label htmlFor='reply-draft' className='mt-3 block text-xs text-slate-400' data-testid='typed-reply-label'>Your reply draft{sending ? ' — saved here while the buyer responds' : ''}</label>
       <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
@@ -32,6 +33,8 @@ export default function ReplyComposer({
         }}
       >
         <Input
+          id='reply-draft'
+          maxLength={2000}
           value={typed}
           onChange={(e) => onTyped(e.target.value)}
           placeholder={
@@ -58,7 +61,7 @@ export default function ReplyComposer({
           data-testid="turn-error"
         >
           <span className="min-w-0 flex-1">
-            {turnError} Your words were kept — retry when ready.
+            {turnError} Review the saved transcript before continuing.
           </span>
           <Button
             size="sm"

@@ -1,12 +1,11 @@
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, Lightbulb, RotateCcw, TriangleAlert, Volume2 } from "lucide-react";
-import { toast } from "sonner";
-import { getUserId } from "@/lib/profile";
+import { ArrowRight, CheckCircle2, Lightbulb, TriangleAlert } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { ScoreRing, SkillBar } from "@/components/Metrics";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import CoachObservation from '@/components/CoachObservation';
 
 // Hand-authored demonstration data. Clearly labelled SAMPLE everywhere so it can
 // never be mistaken for the signed-in rep's own performance.
@@ -21,14 +20,11 @@ const SKILLS = [
 ];
 
 const METRICS = [
-  { k: "Talk / listen", v: "42% / 58%" },
+  { k: "Share of transcript words", v: "42% / 58%" },
   { k: "Questions asked", v: "9" },
   { k: "Open-ended questions", v: "6" },
-  { k: "Follow-up questions", v: "4" },
-  { k: "Interruptions", v: "1" },
-  { k: "Longest monologue", v: "38s" },
-  { k: "Buying signals", v: "2" },
-  { k: "Missed buying signals", v: "1" },
+  { k: "Longest rep turn", v: "45 words" },
+  { k: "Buying signals (AI tags)", v: "2" },
 ];
 
 const TIMELINE = [
@@ -38,13 +34,13 @@ const TIMELINE = [
   { at: "02:42", label: "Pain identified", tone: "strong" },
   { at: "03:08", label: "Premature pitch", tone: "coaching" },
   { at: "03:42", label: "Price objection", tone: "weak" },
-  { at: "04:16", label: "Missed vocal cue", tone: "weak" },
+  { at: "04:16", label: "Unclear agreement", tone: "weak" },
   { at: "06:51", label: "Next step established", tone: "strong" },
 ] as const;
 
 const STRENGTHS = [
   "Natural opening",
-  "Strong listening ratio",
+  "Responded to buyer context",
   "Good follow-up questions",
   "Clear value statement",
   "Secured a next step",
@@ -53,7 +49,7 @@ const STRENGTHS = [
 const PRIORITIES = [
   { skill: "Objection Handling", why: "Don't immediately defend price — find out what it is being compared against." },
   { skill: "Discovery Depth", why: "Explore business impact before presenting any solution." },
-  { skill: "Vocal Cue Recognition", why: "Check hesitation instead of assuming agreement." },
+  { skill: "Clarifying Agreement", why: "Ask what 'could work' means instead of assuming commitment." },
 ];
 
 const toneStyle = {
@@ -63,9 +59,7 @@ const toneStyle = {
 } as const;
 
 export default function SampleReport() {
-  const userId = getUserId();
   const [selected, setSelected] = useState<string>("03:42");
-  if (!userId) return <Navigate to="/" replace />;
 
   return (
     <AppShell>
@@ -86,7 +80,7 @@ export default function SampleReport() {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[auto_1fr]">
           <section className="flex flex-col items-center rounded-xl border border-border bg-card p-6">
-            <ScoreRing score={78} label="Readiness" testid="sample-readiness" />
+            <ScoreRing score={78} label="Example call" testid="sample-readiness" />
             <span className="mt-2 rounded-full bg-secondary px-3 py-1 text-[12px] font-semibold">
               Developing
             </span>
@@ -113,6 +107,8 @@ export default function SampleReport() {
           </section>
         </div>
 
+        <CoachObservation sample title='Clarify the comparison before defending price' detail='This fictional exchange illustrates evidence-linked coaching. In your own report, Retry That Moment reconstructs the saved exchange as a separate coached drill.' buyerQuote="Honestly, that sounds expensive compared with what we're already paying." quote='Our platform actually includes considerably more functionality…' />
+
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="font-heading text-[17px] font-bold">Skill breakdown</h2>
@@ -130,7 +126,7 @@ export default function SampleReport() {
             <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="font-heading text-[17px] font-bold">Conversation metrics</h2>
               <p className="mt-1 text-[12.5px] text-muted-foreground">
-                Measured, not judged — these are counted from the call itself.
+                Fictional illustrative values, not a recorded call. Real reports count transcript words and lexical patterns; buying signals are AI interpretations.
               </p>
               <dl className="mt-4 grid grid-cols-2 gap-3" data-testid="sample-metrics">
                 {METRICS.map((m) => (
@@ -146,37 +142,24 @@ export default function SampleReport() {
 
             <section
               className="rounded-xl border border-sky-200 bg-sky-50 p-5"
-              data-testid="sample-listening-iq"
+              data-testid="sample-measurement-limitations"
             >
               <div className="flex items-baseline justify-between">
-                <h2 className="font-heading text-[17px] font-bold">Listening IQ</h2>
-                <span className="font-heading text-[24px] font-extrabold text-sky-800">86</span>
+                <h2 className="font-heading text-[17px] font-bold">What this report can tell you</h2>
               </div>
               <p className="mt-2 text-[13px] leading-relaxed text-slate-700">
-                You generally responded to what Sarah actually said rather than working through a
-                predetermined script.
+                Coaching interprets the written transcript, not the sound of your voice. Audio is not recorded for replay; interruptions, vocal cues and speaking-time metrics are not measured.
               </p>
               <div className="mt-3 rounded-lg bg-white p-3.5">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-red-700">
-                  Missed vocal cue
+                  Interpreting tentative wording
                 </span>
                 <p className="mt-1.5 font-mono text-[13px] italic text-slate-800">
                   “Yeah… I guess that could work.”
                 </p>
                 <p className="mt-2 text-[13px] leading-relaxed text-slate-700">
-                  Sarah verbally agreed, but her delivery showed hesitation. You kept presenting
-                  instead of checking whether she had a concern.
+                  The words “I guess” are not a clear commitment. Ask whether there is an unresolved concern. This is an interpretation of wording, not an analysis of vocal delivery.
                 </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-3 font-semibold"
-                  onClick={() => toast.info("Audio replay is available on your own graded calls.")}
-                  data-testid="sample-replay-cue"
-                >
-                  <Volume2 className="size-3.5" />
-                  Replay moment
-                </Button>
               </div>
             </section>
           </div>
@@ -231,24 +214,12 @@ export default function SampleReport() {
                 against.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  className="font-semibold"
-                  onClick={() =>
-                    toast.info(
-                      "On your own calls, this drops you straight back into this moment: Sarah repeats the objection in her own voice and reacts to your new answer.",
-                    )
-                  }
-                  data-testid="sample-retry-moment"
-                >
-                  <RotateCcw className="size-3.5" />
-                  See how Retry That Moment works
-                </Button>
+                <p className='text-sm' data-testid='sample-retry-explanation'>On a real completed call, Retry That Moment opens this exact saved exchange with the same buyer voice. It is a new coached drill, not an audio replay or a replacement for your original score.</p>
               </div>
             </div>
           ) : (
             <p className="mt-4 text-[13px] text-muted-foreground" data-testid="sample-timeline-hint">
-              Select the 03:42 price objection to see a full coaching moment with Retry That Moment.
+              {({ '00:00': 'Rep: “Hi Sarah, thanks for making time.” Coach: A concise opening acknowledges the buyer’s time.', '00:48': 'Rep: “Could we spend a few minutes on what prompted this conversation?” Coach: Ask permission before launching discovery.', '01:31': 'Rep: “How do your teams coordinate handovers today?” Coach: An open question explores the current process.', '02:42': 'Buyer: “We keep missing delivery updates.” Coach: This is an opportunity to ask about business impact.', '03:08': 'Rep: “Our platform automates those updates.” Coach: The pitch arrived before the cost of missed updates was understood.', '04:16': 'Buyer: “Yeah… I guess that could work.” Coach: Clarify what remains uncertain; wording alone cannot establish vocal hesitation.', '06:51': 'Rep: “Can we meet Thursday with your operations lead?” Coach: A specific next step names a time and a stakeholder.' } as Record<string, string>)[selected]}
             </p>
           )}
         </section>
@@ -299,14 +270,15 @@ export default function SampleReport() {
             </p>
           </div>
           <Link
-            to="/learn/objection-handling?difficulty=3"
+            to="/"
             className={cn(buttonVariants({ size: "lg" }), "bg-slate-100 font-semibold text-slate-900 hover:bg-white")}
             data-testid="sample-start-drill"
           >
-            Start recommended drill
+            Try the real demo
             <ArrowRight className="size-4" />
           </Link>
         </section>
+        <Button variant='outline' className='mt-6' data-testid='sample-print' onClick={() => window.print()}>Print fictional sample</Button>
       </div>
     </AppShell>
   );

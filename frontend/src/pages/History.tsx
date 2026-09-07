@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Search } from "lucide-react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { toast } from 'sonner';
 import { formatDuration, getUserId, scoreTone } from "@/lib/profile";
 import type { SimulationSummary } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { DifficultyPips, EmptyState } from "@/components/Metrics";
 import { Input } from "@/components/ui/input";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -23,9 +24,12 @@ import { cn } from "@/lib/utils";
 export default function History() {
   const userId = getUserId();
   const [q, setQ] = useState("");
-  const { data, isLoading } = useQuery({
-    queryKey: ["history", userId],
-    queryFn: () => apiGet<SimulationSummary[]>(`/users/${userId}/simulations`),
+  const [offset, setOffset] = useState(0);
+  const qc = useQueryClient();
+  const abandon = useMutation({ mutationFn: (id: string) => apiPost(`/simulations/${id}/abandon`), onSuccess: () => void qc.invalidateQueries({ queryKey: ['history', userId] }), onError: () => toast.error('Could not abandon this session. Please retry.') });
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["history", userId, offset],
+    queryFn: () => apiGet<SimulationSummary[]>(`/users/${userId}/simulations?offset=${offset}&limit=50`),
     enabled: Boolean(userId),
     retry: false,
   });
@@ -53,14 +57,16 @@ export default function History() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              aria-label='Search this page of session history'
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search exercise, prospect, company"
+              placeholder="Search this page"
               className="w-[280px] pl-9"
               data-testid="history-search"
             />
           </div>
         </div>
+        {isError ? <div role='alert' className='mt-5 text-sm' data-testid='history-error'>History could not load.<Button data-testid='history-retry' variant='outline' onClick={() => void refetch()}>Retry</Button></div> : null}
 
         {isLoading ? (
           <div className="mt-8 space-y-2" data-testid="history-loading">
@@ -136,18 +142,19 @@ export default function History() {
                           {r.overall_score}
                         </span>
                       ) : (
-                        <Badge variant="outline">In progress</Badge>
+                        <Badge variant="outline">{r.status.replace('_', ' ')}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link
-                        to={r.status === "completed" ? `/scorecard/${r.id}` : `/simulation/${r.id}`}
+                        to={r.status === "completed" || r.status === 'abandoned' ? `/scorecard/${r.id}` : `/simulation/${r.id}`}
                         className="inline-flex items-center gap-1 text-[13px] font-medium text-primary"
                         data-testid={`history-open-${r.id}`}
                       >
                         {r.status === "completed" ? "Debrief" : "Resume"}
                         <ArrowRight className="size-3.5" />
                       </Link>
+                      {['active', 'preparation'].includes(r.status) ? <Button size='xs' variant='ghost' className='ml-2' data-testid={`history-abandon-${r.id}`} disabled={abandon.isPending} onClick={() => abandon.mutate(r.id)}>Abandon</Button> : null}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -155,6 +162,8 @@ export default function History() {
             </Table>
           </div>
         ) : null}
+
+        <div className='mt-5 flex items-center gap-3' data-testid='history-pagination'><Button variant='outline' data-testid='history-previous-page' disabled={offset === 0 || isLoading} onClick={() => setOffset(v => Math.max(0, v - 50))}>Previous</Button><span className='text-sm' data-testid='history-page-number'>Page {offset / 50 + 1} · 50 sessions per page</span><Button variant='outline' data-testid='history-next-page' disabled={!data || data.length < 50 || isLoading} onClick={() => setOffset(v => v + 50)}>Next</Button></div>
 
         {data && data.length && !rows.length ? (
           <p className="mt-6 text-[13.5px] text-muted-foreground" data-testid="history-no-match">

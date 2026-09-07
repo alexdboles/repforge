@@ -1,5 +1,81 @@
 # RepForge — Voice-First AI Sales Academy
 
+## Hardening pass (supersedes historical entries below)
+Workspace privacy uses immutable workspace IDs plus verified membership records,
+never `org`. All 662 pre-existing accounts were isolated into personal workspaces
+after a checksummed private BSON backup. Historical assignments are retained but
+quarantined as unverified; no transcript or account was deleted.
+Invites are private 48-hour codes tied to the authenticated invitee's email. Reports
+and assignment writes require manager/admin/owner; guests cannot manage teams.
+Sessions are server-validated. Cookie wins over expired bearer; logout revokes all
+of that account's sessions via auth epoch. The 12-hour iframe bearer fallback is
+migrated from localStorage to tab-scoped sessionStorage. Cache resets on logout,
+account changes and cross-tab session events.
+Mongo TTL counters/leases bound guests, user starts, active sessions and provider
+request/character reservations. TTS accepts only an owned saved prospect turn;
+mic samples use a bounded fixed-text endpoint with the session's saved voice.
+Voice QA is platform-admin-only. `/api/health` is read-only; `/status` was removed.
+
+Lifecycle: preparation → active → ending → grading → completed or grading_failed;
+preparation/active may be abandoned. Activation starts the clock. Transcript writes
+have stable IDs, version guards and request idempotency keys. Ending atomically
+freezes the authoritative transcript; no subsequent turns can enter it. Failed
+prospect requests retain accepted speech. Grading retries reuse frozen evidence.
+An expiring grading lease and recovery sweep handle worker interruption. A durable
+reward outbox and atomic per-user award markers prevent duplicate XP and recover
+assignment completion; assignments require the exact linked exercise/difficulty.
+
+New grading uses a strict versioned evidence rubric. Overall score is calculated
+from applicable assessed categories (focus weight 2, others 1). Exact quotations
+and turn indices are verified against the frozen transcript. Malformed/empty grades
+fail recoverably, never become a score of zero. Missing categories are unassessed.
+Legacy reports stay readable and explicitly labelled unvalidated. Text counts are
+computed in code; no acoustic confidence, interruptions, vocal cues or raw-audio replay.
+Full retries clone scenario/context/product/rubric/voice and link the source.
+Moment drills reconstruct the exact referenced exchange, grade a targeted baseline
+with the same rubric/model, and compare only that skill; ties do not improve.
+Coached drills are excluded from ordinary buyer journey memory and full-call trends.
+Full coached retries have a clearly labelled source-versus-retry comparison for
+shared skill scores, without adding that comparison to unaided progress metrics.
+Readiness separates covered skills from assessed scores; no customer certification
+is claimed. Team trends use common scenario cohorts across dated 14-day UTC periods.
+Dashboard totals no longer truncate at 500; history is paginated. Manager-hour
+estimates have a visible adjustable assumption and exclude drills/under-two-minute calls.
+
+Demo: primary landing CTA launches the existing Level 2 cold call, after an isolated
+guest session if needed. Public `/sample-report` never creates a guest account.
+Every new call includes a product/buyer/objective brief, microphone check or explicit
+typed mode. Two minutes is labelled a target, not a forced limit. Mic input activity,
+recognition support, skipped checks and human playback confirmation are distinct.
+Optional live hints require opt-in and mark practice assisted. Product notes remain
+available separately. Library direct practice is no longer gated by training pages.
+Dashboard hides empty stats before a first call; personal next action precedes demo
+promotions after practice. Reports have shared evidence-led coach observations,
+targeted retry, contextual tagged transcript navigation and explicit text-only scope.
+History supports pagination, recovery and abandoning active/preparation calls.
+Reduced motion, focus outlines, visible auth/reply labels and readable print styles
+are supplied. Printed sample reports retain explicit fictional sample labels.
+
+Owner evidence: `/owner/evidence` and `/api/owner/evidence` are platform-admin-only,
+not workspace-owner-accessible. `evidence_events` contains deduplicated server-authored
+events, pseudonymous actor IDs and coarse exercise/difficulty/mode context only.
+No transcript text, credentials, names or emails enter analytics. Fixtures/internal
+users are excluded and past records are not backfilled as adoption. Date filters are
+UTC and limited to 366 days. Demo completion uses a matched start cohort; return use
+requires activity on distinct days. Optional report helpfulness ratings are stored
+separately. No platform admin is inferred or auto-promoted; private operator command
+and truthful contest narrative live in `memory/CONTEST_EVIDENCE.md`.
+
+Portfolio preparation: root `README.md` now describes RepForge rather than a skeleton.
+`PORTFOLIO_CHECKLIST.md` tracks checked A–D deliverables and remaining owner publication
+decisions. Public `docs/` contains demo guide, architecture/Mermaid, validation, honest
+status, read-only history audit and three real fictional-demo screenshots. No video,
+licence, ownership claim, repository publication, deployment or contest change was made.
+`scripts/public_release_audit.py` and `scripts/check_portfolio_docs.py` are read-only.
+Private checkpoints/configuration/credentials/reports are ignored; already tracked
+internal files still require manual history/export review. Production URL was readable
+but older than the verified preview, explicitly documented rather than auto-deployed.
+
 Tagline: *Practice the Conversation Before It Counts.*
 
 ## What it does

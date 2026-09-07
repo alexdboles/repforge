@@ -10,7 +10,7 @@ out of range -> 404).
 import httpx
 import pytest
 
-from .conftest import api_url, signup_user
+from .conftest import api_url, activate_sim, signup_user
 
 TIMEOUT = 180.0
 
@@ -41,6 +41,7 @@ def _start_and_complete_weak_call(c: httpx.Client, user_id: str) -> tuple[str, d
     )
     assert start.status_code == 200, start.text
     sim_id = start.json()["id"]
+    activate_sim(c, sim_id)
 
     turn = c.post(
         api_url(f"/simulations/{sim_id}/turns"),
@@ -79,6 +80,7 @@ def test_retry_moment_full_flow_and_original_unchanged(rep_user, other_user):
     assert len(transcript) == 1, transcript
 
     retry_id = body["id"]
+    activate_sim(c, retry_id)
 
     # Send a typed reply and complete the retry -> gets its own evaluation.
     reply = c.post(

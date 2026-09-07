@@ -8,7 +8,7 @@ for the next start.
 
 import pytest
 
-from .conftest import api_url, signup_user
+from .conftest import api_url, activate_sim, signup_user
 
 
 @pytest.fixture
@@ -48,10 +48,11 @@ def test_fourth_concurrent_active_simulation_returns_409(rep_user):
         },
     )
     assert fourth.status_code == 409, fourth.text
-    assert "live simulations" in fourth.json()["detail"].lower()
+    assert "open calls" in fourth.json()["detail"].lower() or "live simulations" in fourth.json()["detail"].lower()
 
     # Ending one of the three active sims (turn + complete, since grading
     # requires at least one rep turn) frees a slot for a new start.
+    activate_sim(c, sim_ids[1])
     turn = c.post(
         api_url(f"/simulations/{sim_ids[1]}/turns"),
         json={"text": "Hi, quick question about your current process.", "at": 1.0},

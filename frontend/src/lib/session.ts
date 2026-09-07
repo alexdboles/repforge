@@ -2,17 +2,23 @@
 // duty is wiping the react-query cache so one account's data never renders for the next.
 import { queryClient } from "./queryClient";
 import { apiPost } from "./api";
+import { clearToken, clearUserId } from './profile';
 
 // Call after every successful login/signup.
 export function beginSession(): void {
   queryClient.clear();
+  window.dispatchEvent(new Event('repforge-session-changed'));
+  localStorage.setItem('repforge.session-change', String(Date.now()));
 }
 
 // Call from every sign-out control; the hard redirect resets all in-memory state.
-export async function endSession(redirectTo: string = "/login"): Promise<void> {
+export async function endSession(redirectTo: string = "/"): Promise<void> {
   try {
     await apiPost("/auth/logout");
   } finally {
+    clearToken();
+    clearUserId();
+    localStorage.setItem('repforge.session-change', String(Date.now()));
     queryClient.clear();
     window.location.assign(redirectTo);
   }

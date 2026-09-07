@@ -1,11 +1,11 @@
 """Attempt comparison and the org-level team view."""
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from lib.analytics import build_skills, build_exercise_stats
+from lib.analytics import build_skills, build_exercise_stats, comparable_key, dated_comparable_trend
 from lib.catalog import difficulty_by_level, exercise_by_id
-from lib.auth import current_user, require_org, require_self
+from lib.auth import current_user, require_org, require_self, require_manager
 from lib.db import db
 from models.schemas import (
     Assignment,
@@ -27,7 +27,7 @@ async def _completed(query: dict) -> list[dict]:
     return (
         await db.simulations.find({**query, "status": "completed"}, {"_id": 0})
         .sort("started_at", 1)
-        .to_list(500)
+        .to_list(None)
     )
 
 
@@ -79,18 +79,27 @@ def _apply_category_movement(series: AttemptSeries, attempts: list[Attempt]) -> 
     deltas = {c: last[c] - first[c] for c in last if c in first}
     series.category_deltas = deltas
     if deltas:
-        series.most_improved = max(deltas, key=lambda k: deltas[k])
+        best = max(deltas, key=lambda k: deltas[k])
+        series.most_improved = best if deltas[best] > 0 else None
     if last:
         series.still_weakest = min(last, key=lambda k: last[k])
 
 
 @router.get("/users/{user_id}/attempts/{exercise_id}", response_model=AttemptSeries)
-async def attempt_series(user_id: str, exercise_id: str, me: dict = Depends(current_user)):
+async def attempt_series(user_id: str, exercise_id: str, simulation_id: str | None = None, me: dict = Depends(current_user)):
     require_self(user_id, me)
     exercise = exercise_by_id(exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Unknown exercise")
     sims = await _completed({"user_id": user_id, "exercise_id": exercise_id})
+    sims = [s for s in sims if s.get('mode') != 'moment' and (s.get('evaluation') or {}).get('evidence_validated')]
+    anchor = next((s for s in sims if s['id'] == simulation_id), sims[-1] if sims else None)
+    source = next((s for s in sims if anchor and s['id'] == anchor.get('retry_of')), None)
+    coached = bool(source and anchor and comparable_key({**source, 'assisted': False}) == comparable_key({**anchor, 'assisted': False}))
+    if coached:
+        sims = [source, anchor]
+    else:
+        sims = [s for s in sims if comparable_key(s) == comparable_key(anchor)] if anchor else []
 
     attempts = [_attempt(i + 1, sim) for i, sim in enumerate(sims)]
     series = AttemptSeries(
@@ -98,6 +107,9 @@ async def attempt_series(user_id: str, exercise_id: str, me: dict = Depends(curr
     )
     _apply_totals(series, attempts)
     _apply_category_movement(series, attempts)
+    if coached:
+        series.comparison_kind = 'coached_source'
+        series.comparison_note = 'Coached full retry versus its original call. Same scenario, product, difficulty and rubric; assistance differs. Shared skill scores can be compared, but overall totals may cover different skills. This is not unaided improvement and is excluded from unaided progress metrics.'
     return series
 
 
@@ -129,7 +141,7 @@ def _team_member(user: dict, sims: list[dict]) -> TeamMember:
         reps=len(sims),
         average_score=round(sum(scores) / len(scores)) if scores else None,
         latest_score=scores[-1] if scores else None,
-        improvement=_improvement(scores),
+        improvement=dated_comparable_trend(sims),
         practice_seconds=sum(s.get("duration_seconds", 0) for s in sims),
         last_practice_date=user.get("last_practice_date"),
         weakest_skill=skills[-1]["category"] if skills else None,
@@ -154,22 +166,26 @@ def _lapsed_names(members: list[TeamMember], days: int = 3) -> list[str]:
 
 
 @router.get("/teams/{org}", response_model=TeamView)
-async def team_view(org: str, me: dict = Depends(current_user)):
+async def team_view(org: str, manager_minutes: int = Query(default=15, ge=0, le=120), me: dict = Depends(current_user)):
     require_org(org, me)
-    users = await db.users.find({"org": org}, {"_id": 0, "password": 0}).to_list(200)
+    require_manager(me)
+    member_ids = await db.memberships.distinct('user_id', {'workspace_id': org, 'verified': True})
+    users = await db.users.find({'id': {'$in': member_ids}}, {"_id": 0, "password": 0}).to_list(None)
     if not users:
         raise HTTPException(status_code=404, detail="No reps in this organisation yet")
 
     members: list[TeamMember] = []
-    all_sims: list[dict] = []
+    all_sims = await _completed({'user_id': {'$in': member_ids}, 'mode': {'$ne': 'moment'}})
+    by_member = {uid: [] for uid in member_ids}
+    for sim in all_sims:
+        by_member[sim['user_id']].append(sim)
     for user in users:
-        sims = await _completed({"user_id": user["id"]})
-        all_sims.extend(sims)
+        sims = by_member[user['id']]
         members.append(_team_member(user, sims))
 
     team_scores = _scores(all_sims)
     assignments = (
-        await db.assignments.find({"org": org}, {"_id": 0}).sort("created_at", -1).to_list(200)
+        await db.assignments.find({"workspace_id": org}, {"_id": 0}).sort("created_at", -1).to_list(None)
     )
     return TeamView(
         org=org,
@@ -177,14 +193,14 @@ async def team_view(org: str, me: dict = Depends(current_user)):
         total_reps=len(all_sims),
         total_practice_seconds=sum(s.get("duration_seconds", 0) for s in all_sims),
         team_average=round(sum(team_scores) / len(team_scores)) if team_scores else None,
-        team_improvement=_improvement(team_scores),
+        team_improvement=dated_comparable_trend(all_sims),
         skill_gaps=[SkillStat(**s) for s in build_skills(all_sims)][::-1][:6],
         exercise_coverage=build_exercise_stats(all_sims),
         leaderboard=sorted(
             [m for m in members if m.average_score is not None],
             key=lambda m: -(m.average_score or 0),
         )[:10],
-        manager_hours_saved=round(len(all_sims) * MANAGER_MINUTES_PER_ROLEPLAY / 60, 1),
+        manager_hours_saved=round(sum(s.get('duration_seconds', 0) >= 120 for s in all_sims) * manager_minutes / 60, 1),
         assignments=[Assignment(**a) for a in assignments],
         lapsed_members=_lapsed_names(members),
     )
@@ -195,13 +211,14 @@ async def team_view(org: str, me: dict = Depends(current_user)):
 
 @router.post("/assignments", response_model=Assignment)
 async def create_assignment(payload: AssignmentCreate, me: dict = Depends(current_user)):
+    require_manager(me)
     user = await db.users.find_one({"id": payload.user_id}, {"_id": 0, "password": 0})
     if not user:
         raise HTTPException(status_code=404, detail="Rep not found")
     # Tenant boundary: you may only assign training inside your own organisation.
-    require_org(user.get("org", ""), me)
-    if payload.org:
-        require_org(payload.org, me)
+    member = await db.memberships.find_one({'workspace_id': me['workspace_id'], 'user_id': user['id'], 'verified': True})
+    if not member:
+        raise HTTPException(404, 'Rep not found in your workspace')
     exercise = exercise_by_id(payload.exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail="Unknown exercise")
@@ -211,13 +228,14 @@ async def create_assignment(payload: AssignmentCreate, me: dict = Depends(curren
     assignment = Assignment(
         user_id=payload.user_id,
         user_name=user["name"],
-        org=payload.org or user.get("org", ""),
+        org=me.get('org', ''),
+        workspace_id=me['workspace_id'],
         exercise_id=exercise["id"],
         exercise_name=exercise["name"],
         difficulty=difficulty["level"],
         difficulty_name=difficulty["name"],
         note=payload.note,
-        assigned_by=payload.assigned_by,
+        assigned_by=me['id'],
     )
     await db.assignments.insert_one(assignment.model_dump())
     return assignment
@@ -237,8 +255,9 @@ async def list_user_assignments(user_id: str, me: dict = Depends(current_user)):
 @router.get("/teams/{org}/assignments", response_model=list[Assignment])
 async def list_team_assignments(org: str, me: dict = Depends(current_user)):
     require_org(org, me)
+    require_manager(me)
     docs = (
-        await db.assignments.find({"org": org}, {"_id": 0}).sort("created_at", -1).to_list(200)
+        await db.assignments.find({"workspace_id": org}, {"_id": 0}).sort("created_at", -1).to_list(None)
     )
     return [Assignment(**d) for d in docs]
 
@@ -248,7 +267,8 @@ async def delete_assignment(assignment_id: str, me: dict = Depends(current_user)
     doc = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    require_org(doc.get("org", ""), me)
+    require_org(doc.get('workspace_id', ''), me)
+    require_manager(me)
     res = await db.assignments.delete_one({"id": assignment_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Assignment not found")

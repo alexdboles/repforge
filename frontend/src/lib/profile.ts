@@ -8,7 +8,14 @@ const TOKEN_KEY = "vocalpitch.session_token";
 
 export function getToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    const token = sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp: number };
+      if (claims.exp * 1000 <= Date.now()) { clearToken(); return null; }
+      sessionStorage.setItem(TOKEN_KEY, token);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    return token;
   } catch (err) {
     console.error("localStorage read failed", err);
     return null;
@@ -17,7 +24,8 @@ export function getToken(): string | null {
 
 export function setToken(token: string): void {
   try {
-    localStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.removeItem(TOKEN_KEY);
   } catch (err) {
     console.error("localStorage write failed", err);
   }
@@ -26,6 +34,7 @@ export function setToken(token: string): void {
 export function clearToken(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
   } catch (err) {
     console.error("localStorage write failed", err);
   }

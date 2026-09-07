@@ -1,6 +1,8 @@
 """Dashboard / progress aggregation over completed simulations."""
 from collections.abc import Callable
 from typing import Any
+import json
+from lib.dates import today_iso
 
 from lib.catalog import (
     BADGES,
@@ -14,6 +16,40 @@ from lib.catalog import (
 
 def _completed_scores(sims: list[dict]) -> list[int]:
     return [s["evaluation"]["overall_score"] for s in sims if s.get("evaluation")]
+
+
+def comparable_key(sim: dict):
+    return json.dumps([sim.get('exercise_id'), sim.get('difficulty'), sim.get('scenario'),
+        sim.get('rubric_snapshot') or (sim.get('evaluation') or {}).get('rubric_version', 'legacy'),
+        sim.get('prior_context', ''), sim.get('assisted', False), sim.get('mode') == 'moment'], sort_keys=True, default=str)
+
+
+def comparable_delta(sims: list[dict]) -> int:
+    if not sims:
+        return 0
+    last = sims[-1]
+    group = [s for s in sims if comparable_key(s) == comparable_key(last)]
+    if len(group) < 2:
+        return 0
+    return group[-1]['evaluation']['overall_score'] - group[0]['evaluation']['overall_score']
+
+
+def dated_comparable_trend(sims: list[dict]) -> int:
+    """Equal-weight common scenario cohorts: last 14 UTC days vs preceding 14."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    buckets = {}
+    for sim in sims:
+        when = sim['started_at']
+        if isinstance(when, str):
+            when = datetime.fromisoformat(when.replace('Z', '+00:00'))
+        when = when.replace(tzinfo=timezone.utc) if not when.tzinfo else when
+        if when < now - timedelta(days=28):
+            continue
+        group = buckets.setdefault(comparable_key(sim), [[], []])
+        group[1 if when >= now - timedelta(days=14) else 0].append(sim['evaluation']['overall_score'])
+    deltas = [sum(b) / len(b) - sum(a) / len(a) for a, b in buckets.values() if a and b]
+    return round(sum(deltas) / len(deltas)) if deltas else 0
 
 
 def build_skills(sims: list[dict]) -> list[dict[str, Any]]:
@@ -158,7 +194,7 @@ def summarize(sim: dict) -> dict[str, Any]:
         "started_at": sim["started_at"],
         "duration_seconds": sim.get("duration_seconds", 0),
         "overall_score": ev["overall_score"] if ev else None,
-        "turns": len(sim.get("transcript") or []),
+        "turns": sim.get('turns_count', len(sim.get("transcript") or [])),
     }
 
 
@@ -175,7 +211,7 @@ def build_nudge(user: dict, sims: list[dict]) -> dict[str, Any]:
             "detail": "One five-minute call is enough to get a baseline score you can improve on.",
         }
     try:
-        days = (date.today() - date.fromisoformat(last)).days
+        days = (date.fromisoformat(today_iso()) - date.fromisoformat(last)).days
     except ValueError:
         days = 0
     streak = user.get("streak", 0)
@@ -184,7 +220,7 @@ def build_nudge(user: dict, sims: list[dict]) -> dict[str, Any]:
             "level": "fresh",
             "days_since": days,
             "headline": f"{streak}-day streak alive",
-            "detail": "You practised today. Another rep at a higher difficulty compounds it.",
+            "detail": "You practised today (UTC)." if days == 0 else 'You practised yesterday (UTC). Practise today to continue your streak.',
         }
     if days < 3:
         return {
@@ -208,9 +244,9 @@ def _readiness_label(score: int, assessed: bool) -> str:
     if not assessed:
         return "Not assessed"
     if score >= 75:
-        return "Customer ready"
+        return "Strong practice evidence"
     if score >= 55:
-        return "Nearly ready"
+        return "Developing practice evidence"
     return "Keep practising"
 
 
@@ -239,7 +275,7 @@ def _readiness_categories(skills: list[dict]) -> tuple[list[dict], float, float]
         cats.append(
             {
                 "category": cat,
-                "score": stat["average"] if stat else 0,
+                "score": stat["average"] if stat else None,
                 "weight": round(weight * 100),
                 "attempts": stat["attempts"] if stat else 0,
             }
@@ -252,10 +288,10 @@ def build_readiness(skills: list[dict], sims: list[dict]) -> dict[str, Any]:
     competencies are not silently ignored — they cap the achievable score."""
     cats, weighted_sum, covered_weight = _readiness_categories(skills)
     # Unpractised competencies count as zero, so breadth matters as much as depth.
-    score = round(weighted_sum) if sims else 0
+    score = round(weighted_sum / covered_weight) if covered_weight else 0
     scored = [c for c in cats if c["attempts"]]
     weakest = min(scored, key=lambda c: c["score"]) if scored else None
-    label = _readiness_label(score, bool(sims))
+    label = _readiness_label(score, bool(scored))
     rec = _readiness_recommendation(weakest, bool(sims))
     return {
         "score": score,
@@ -306,15 +342,23 @@ def build_headline_stats(scores: list[int], skills: list[dict]) -> dict[str, Any
 
 def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
     """sims: completed simulations, oldest first."""
-    scores = _completed_scores(sims)
-    skills = build_skills(sims)
+    all_sims = sims
+    full = [s for s in sims if s.get('mode') != 'moment']
+    assessed = [s for s in full if (s.get('evaluation') or {}).get('evidence_validated') and not s.get('assisted')]
+    scores = _completed_scores(full)
+    skills = build_skills(assessed)
     unlocked = unlocked_difficulty(user.get("xp", 0), sims)
     earned = earned_badges(user, sims)
     return {
         "user": {**user, "badges": earned},
         "completed": len(sims),
+        'full_calls': len(full),
+        'moment_drills': len(all_sims) - len(full),
+        'assisted_calls': sum(bool(s.get('assisted')) for s in full),
+        'assessed_calls': len(assessed),
         **build_headline_stats(scores, skills),
-        "trend": build_trend(sims),
+        'improvement': comparable_delta(assessed),
+        "trend": build_trend(full)[-50:],
         "skills": skills,
         "exercise_stats": build_exercise_stats(sims),
         "difficulty_reached": max([s["difficulty"] for s in sims], default=1),
@@ -324,7 +368,7 @@ def build_dashboard(user: dict, sims: list[dict]) -> dict[str, Any]:
         "total_practice_seconds": sum(s.get("duration_seconds", 0) for s in sims),
         "badges": badge_list(earned),
         "nudge": build_nudge(user, sims),
-        "readiness": build_readiness(skills, sims),
+        "readiness": build_readiness(skills, assessed),
     }
 
 

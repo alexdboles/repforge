@@ -9,12 +9,15 @@ import type { Exercise, SessionResponse, UserProfile } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { beginSession } from '@/lib/session';
+import { useDemoLaunch } from '@/lib/demo';
+import { Label } from '@/components/ui/label';
 
 const STEPS = [
   {
     icon: ShieldCheck,
     title: "Pick the situation",
-    body: "Eight exercise types, five difficulty tiers, and scenarios with information deliberately hidden from you.",
+    body: "A growing exercise library, five difficulty tiers, and scenarios with information deliberately hidden from you.",
   },
   {
     icon: Mic,
@@ -24,18 +27,20 @@ const STEPS = [
   {
     icon: BarChart3,
     title: "Get graded, then repeat",
-    body: "A scored breakdown across 14 selling competencies, quoted from your actual words, plus what to practice next.",
+    body: "Evidence-linked skill assessments, quotations from your words, and a targeted moment to practice again.",
   },
 ];
 
 export default function Landing() {
+  const demo = useDemoLaunch();
+  const [showAuth, setShowAuth] = useState(false);
   const existing = getUserId();
   // A valid session cookie may outlive the cached id (new device tab, cleared
   // storage): ask the server who we are before showing the sign-in form.
   const { data: session, error: sessionError } = useQuery({
     queryKey: ["session"],
     queryFn: () => apiGet<UserProfile>("/auth/me"),
-    enabled: !existing,
+    enabled: Boolean(existing),
     retry: false,
   });
   useEffect(() => {
@@ -45,8 +50,8 @@ export default function Landing() {
     // No cached id and no valid session → drop any stale token so the form works.
     if (!existing && sessionError) clearToken();
   }, [existing, sessionError]);
-  const signedIn = Boolean(existing || session);
-  const { data: exercises } = useQuery({
+  const signedIn = Boolean(session);
+  const { data: exercises, isError: libraryError, refetch: retryLibrary } = useQuery({
     queryKey: ["exercises"],
     queryFn: () => apiGet<Exercise[]>("/exercises"),
     retry: false,
@@ -89,11 +94,13 @@ export default function Landing() {
           </h1>
           <p className="mt-6 max-w-xl text-[16.5px] leading-relaxed text-muted-foreground">
             First we teach the skill. Then you practise it out loud against an AI prospect who
-            withholds information, objects and can walk away. Then you get coaching quoted from your
+            withholds information, objects and resists generic pitches. Then you get coaching quoted from your
             own words — and you can run the whole loop against your real product, not just ours.
           </p>
 
           <div className="mt-8">
+            <Button size='lg' className='font-semibold' data-testid='landing-demo-button' disabled={demo.isPending} onClick={() => demo.mutate()}>{demo.isPending ? 'Preparing your buyer…' : 'Try a 2-minute demo'}<ArrowRight className='size-4' /></Button>
+            <Link to='/sample-report' className='mt-4 block text-sm font-semibold text-primary' data-testid='landing-sample-report'>View a sample coaching report →</Link>
             {signedIn ? (
               <Link
                 to="/learn/cold-call?difficulty=2"
@@ -103,20 +110,19 @@ export default function Landing() {
                 Start a simulation
                 <ArrowRight className="size-4" />
               </Link>
-            ) : (
+            ) : showAuth ? (
               <AuthPanel />
-            )}
+            ) : <Button variant='ghost' className='mt-4' data-testid='landing-show-auth' onClick={() => setShowAuth(true)}>Sign in or create an account</Button>}
           </div>
           <p className="mt-3 text-[12.5px] text-muted-foreground">
-            Your account keeps your scorecards, streak and buyer history. Prefer to look around
-            first? Continue as a guest — you can create an account later.
+            No signup required for the demo. Two minutes is a practice target, not a time limit. Voice or typed replies — your choice.
           </p>
 
           <dl className="mt-12 grid grid-cols-3 gap-6 border-t border-border pt-8">
             {[
-              { k: "8", v: "exercise types" },
+              { k: exercises ? String(exercises.length) : '—', v: "exercise types" },
               { k: "5", v: "difficulty tiers" },
-              { k: "14", v: "graded competencies" },
+              { k: "1", v: "complete coaching loop" },
             ].map((s) => (
               <div key={s.v}>
                 <dt className="font-heading text-[28px] font-extrabold leading-none">{s.k}</dt>
@@ -131,7 +137,7 @@ export default function Landing() {
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 <span className="size-2 animate-pulse rounded-full bg-red-500" />
-                Live simulation
+                Example simulation
               </span>
               <span className="font-mono text-[13px] text-slate-300">03:42</span>
             </div>
@@ -167,9 +173,9 @@ export default function Landing() {
 
           <div className="mt-4 grid grid-cols-3 gap-3">
             {[
-              { icon: Clock, label: "Unlimited reps" },
-              { icon: BarChart3, label: "Measured skills" },
-              { icon: Users, label: "Team ready" },
+              { icon: Clock, label: "On-demand practice" },
+              { icon: BarChart3, label: "Evidence-led coaching" },
+              { icon: Users, label: "Private workspaces" },
             ].map((f) => (
               <div
                 key={f.label}
@@ -208,6 +214,7 @@ export default function Landing() {
           Every exercise runs live, in voice, with a scored debrief afterwards.
         </p>
         <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {libraryError ? <div role='alert' data-testid='landing-library-error'><p>Exercise details could not load.</p><Button data-testid='landing-library-retry' variant='outline' onClick={() => void retryLibrary()}>Retry library</Button></div> : null}
           {(exercises ?? []).map((ex) => (
             <div
               key={ex.id}
@@ -218,7 +225,7 @@ export default function Landing() {
               <p className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">{ex.tagline}</p>
             </div>
           ))}
-          {!exercises
+          {!exercises && !libraryError
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-24 animate-pulse rounded-lg bg-secondary" />
               ))
@@ -237,10 +244,12 @@ function AuthPanel() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signup");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [formError, setFormError] = useState('');
 
   const land = (session: SessionResponse) => {
     setToken(session.token);
     setUserId(session.user.id);
+    beginSession();
     navigate("/dashboard");
   };
 
@@ -250,6 +259,7 @@ function AuthPanel() {
         ? (err.body as { detail: string }).detail
         : fallback;
     toast.error(detail);
+    setFormError(detail);
   };
 
   const signup = useMutation({
@@ -311,17 +321,23 @@ function AuthPanel() {
           active.mutate();
         }}
       >
-        {mode === "signup" ? (
+        {mode === "signup" ? (<>
+          <Label htmlFor='auth-name' data-testid='auth-name-label'>Your name</Label>
           <Input
+            id='auth-name'
+            required
             data-testid="auth-name-input"
             placeholder="Your name"
             autoComplete="name"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             className="h-11"
-          />
+          /></>
         ) : null}
+        <Label htmlFor='auth-email' data-testid='auth-email-label'>Email address</Label>
         <Input
+          id='auth-email'
+          required
           data-testid="auth-email-input"
           type="email"
           placeholder="Work email"
@@ -330,7 +346,10 @@ function AuthPanel() {
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           className="h-11"
         />
+        <Label htmlFor='auth-password' data-testid='auth-password-label'>Password{mode === 'signup' ? ' (8+ characters, at most 72 UTF-8 bytes)' : ''}</Label>
         <Input
+          id='auth-password'
+          required
           data-testid="auth-password-input"
           type="password"
           placeholder={mode === "signup" ? "Password (8+ characters)" : "Password"}
@@ -339,6 +358,7 @@ function AuthPanel() {
           onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           className="h-11"
         />
+        {formError ? <p role='alert' className='text-sm text-red-700' data-testid='auth-form-error'>{formError}</p> : null}
         <Button
           type="submit"
           size="lg"

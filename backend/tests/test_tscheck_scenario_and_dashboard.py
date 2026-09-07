@@ -11,7 +11,7 @@ lib.analytics.build_dashboard -> build_headline_stats/build_trend/score_improvem
 
 import pytest
 
-from .conftest import api_url, signup_user
+from .conftest import api_url, activate_sim, signup_user
 
 TIMEOUT = 60.0
 
@@ -60,7 +60,7 @@ def test_custom_scenario_generation_starts_simulation(rep_user):
     )
     assert sim_r.status_code == 200, sim_r.text
     sim = sim_r.json()
-    assert sim["status"] == "active"
+    assert sim["status"] == "preparation"
     assert sim["scenario"]["company"] == scenario["company"]
 
 
@@ -96,6 +96,7 @@ def test_dashboard_fields_consistent_with_completed_calls(rep_user):
     )
     assert start.status_code == 200, start.text
     sim_id = start.json()["id"]
+    activate_sim(c, sim_id)
     turn = c.post(
         api_url(f"/simulations/{sim_id}/turns"),
         json={"text": "Hi, do you have a minute to chat about your CRM setup?", "at": 1.0},

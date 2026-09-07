@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import WorkspaceAccess from '@/components/WorkspaceAccess';
 
 export default function Team() {
   const userId = getUserId();
@@ -32,17 +33,18 @@ export default function Team() {
     retry: false,
   });
   const qc = useQueryClient();
-  const [org, setOrg] = useState<string | null>(null);
   const [assignTo, setAssignTo] = useState<string | null>(null);
   const [assignExercise, setAssignExercise] = useState("objection-handling");
   const [assignLevel, setAssignLevel] = useState(3);
   const [assignNote, setAssignNote] = useState("");
-  const activeOrg = org ?? user?.org ?? "";
+  const [managerMinutes, setManagerMinutes] = useState(15);
+  const activeOrg = user?.workspace_id ?? '';
+  const canManage = Boolean(user && !user.is_guest && ['owner', 'admin', 'manager'].includes(user.workspace_role));
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["team", activeOrg],
-    queryFn: () => apiGet<TeamView>(`/teams/${encodeURIComponent(activeOrg)}`),
-    enabled: Boolean(activeOrg),
+    queryKey: ["team", activeOrg, managerMinutes],
+    queryFn: () => apiGet<TeamView>(`/teams/${encodeURIComponent(activeOrg)}?manager_minutes=${managerMinutes}`),
+    enabled: Boolean(activeOrg) && canManage,
     retry: false,
   });
 
@@ -92,22 +94,24 @@ export default function Team() {
               Team performance
             </h1>
             <p className="mt-1.5 max-w-2xl text-[14px] text-muted-foreground">
-              Every rep who sets the same Organisation on their profile rolls up here — practice
-              frequency, improvement, shared skill gaps and the coaching hours this replaces.
+              Only verified workspace members appear here. Reports and assignments require manager permission.
             </p>
           </div>
           <div>
             <label className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Organisation
+              Workspace ID
             </label>
             <Input
               value={activeOrg}
-              onChange={(e) => setOrg(e.target.value)}
+              readOnly
               className="mt-1.5 w-[240px]"
               data-testid="team-org-input"
             />
           </div>
         </div>
+
+        {user ? <WorkspaceAccess user={user} /> : null}
+        {user && !canManage ? <p data-testid='team-permission-note'>Team reports are restricted to managers. Your own practice remains available in History.</p> : null}
 
         {isLoading ? (
           <div className="mt-8 grid gap-4 lg:grid-cols-4" data-testid="team-loading">
@@ -121,11 +125,11 @@ export default function Team() {
           <div className="mt-8">
             <EmptyState
               testid="team-empty"
-              title={`No reps in "${activeOrg}" yet`}
-              body="Set the same Organisation name on each rep's profile and their simulations roll up into this view. Change the organisation above to look at another team."
+              title="Team report unavailable"
+              body="Check your verified membership and manager permissions, then reload. Organisation names do not grant access."
               action={
                 <Link to="/profile" className={cn(buttonVariants(), "font-semibold")} data-testid="team-empty-cta">
-                  Set my organisation
+                  View my profile
                 </Link>
               }
             />
@@ -150,18 +154,20 @@ export default function Team() {
               />
               <StatCard
                 testid="team-stat-improvement"
-                label="Team improvement"
+                label="Comparable score change"
                 value={`${data.team_improvement > 0 ? "+" : ""}${data.team_improvement}`}
                 tone={data.team_improvement >= 0 ? "text-emerald-600" : "text-red-600"}
-                hint="Latest half vs first half"
+                hint="Last 14 UTC days vs previous 14; common scenario cohorts only"
               />
               <StatCard
                 testid="team-stat-hours"
-                label="Manager hours saved"
+                label="Estimated manager hours"
                 value={`${data.manager_hours_saved}h`}
-                hint={`${data.total_reps} role-plays at 30 min each`}
+                hint={`Full calls of 2+ minutes × ${managerMinutes} assumed minutes; not measured savings`}
               />
             </div>
+
+            <label className='mt-4 flex flex-wrap items-center gap-3 text-sm' data-testid='manager-assumption-label'>Assumed manager minutes per full role-play<Input className='w-24' type='number' min={0} max={120} value={managerMinutes} onChange={e => setManagerMinutes(Math.min(120, Math.max(0, Number(e.target.value))))} data-testid='manager-minutes-assumption' /></label>
 
             {data.lapsed_members.length ? (
               <div
@@ -418,13 +424,12 @@ export default function Team() {
                         ) : null}
                       </span>
                       {a.status === "completed" ? (
-                        <Link
-                          to={`/scorecard/${a.completed_simulation_id}`}
+                        <span
                           className="text-[12.5px] font-semibold text-emerald-700"
                           data-testid={`team-assignment-done-${a.id}`}
                         >
                           Completed · {a.score}
-                        </Link>
+                        </span>
                       ) : (
                         <Badge variant="outline">Pending</Badge>
                       )}
@@ -480,9 +485,8 @@ export default function Team() {
             >
               <Info className="mt-0.5 size-4 shrink-0" />
               <span>
-                Manager preview: read-only aggregation over the existing rep data. Assigned training,
-                invite-based membership and onboarding programmes are the next layer — the data model
-                already supports them.
+                Verified workspace members only. Managers see summary scores, not private transcripts.
+                Score history is practice evidence, not a validated qualification. Time savings are estimates, not measured customer outcomes.
               </span>
             </div>
 

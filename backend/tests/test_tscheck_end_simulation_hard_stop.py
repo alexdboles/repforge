@@ -12,7 +12,7 @@ import asyncio
 import httpx
 import pytest
 
-from .conftest import API_URL, signup_user
+from .conftest import API_URL, activate_sim, signup_user
 
 TIMEOUT = 180.0
 
@@ -38,6 +38,7 @@ async def test_end_simulation_hard_stop_mid_turn(rep_user):
     )
     assert start.status_code == 200, start.text
     sim_id = start.json()["id"]
+    activate_sim(c, sim_id)
 
     async with httpx.AsyncClient(
         base_url=API_URL, timeout=TIMEOUT, headers=dict(c.headers)

@@ -105,6 +105,7 @@ export default function SkillModule() {
         difficulty: level,
         scenario_id: brief?.id,
         mode: "guided",
+        assignment_id: params.get('assignment'),
       }),
     onSuccess: (sim) => navigate(`/simulation/${sim.id}`),
     onError: (err) => {
@@ -122,7 +123,7 @@ export default function SkillModule() {
     // Reaching the prep step is what unlocks this skill for direct practice later.
     if (i >= 2 && !trained && !markTrained.isPending) markTrained.mutate();
     setStep(i);
-    setParams({ difficulty: String(level) }, { replace: true });
+    setParams({ difficulty: String(level), ...(params.get('assignment') ? { assignment: params.get('assignment')! } : {}) }, { replace: true });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 

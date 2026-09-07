@@ -32,6 +32,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import CoachObservation from '@/components/CoachObservation';
+import ReportFeedback from '@/components/ReportFeedback';
 
 export default function Scorecard() {
   const { id = "" } = useParams();
@@ -98,8 +100,8 @@ export default function Scorecard() {
   const m = evaluation?.metrics;
   const talkData = m
     ? [
-        { name: "You talking", value: m.talk_ratio },
-        { name: "Prospect talking", value: Math.max(0, 100 - m.talk_ratio) },
+        { name: "Your transcript words", value: m.talk_ratio },
+        { name: "Buyer transcript words", value: Math.max(0, 100 - m.talk_ratio) },
       ]
     : [];
   const questionData = m
@@ -121,6 +123,7 @@ export default function Scorecard() {
           <div>
             <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
               <Badge variant="secondary">{sim.exercise_name}</Badge>
+              {sim.is_demo ? <Badge data-testid='report-demo-label' variant='outline'>Demo scenario · fictional buyer</Badge> : null}
               <span>
                 Level {sim.difficulty} · {sim.difficulty_name}
               </span>
@@ -142,7 +145,7 @@ export default function Scorecard() {
               variant="outline"
               className="font-semibold"
               onClick={() => retrySame.mutate()}
-              disabled={retrySame.isPending}
+              disabled={retrySame.isPending || sim.status !== 'completed' || sim.mode === 'moment'}
               data-testid="scorecard-retry-same-prospect"
             >
               {retrySame.isPending ? (
@@ -192,10 +195,10 @@ export default function Scorecard() {
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-4 text-[13px]">
               <span className="rounded-md bg-white px-3 py-1.5 font-semibold text-slate-700">
-                Original simulation: {sim.origin_score}
+                Original target skill: {sim.moment_baseline ?? 'Unassessed'}
               </span>
               <span className="rounded-md bg-white px-3 py-1.5 font-semibold text-slate-700">
-                This retry: {evaluation?.overall_score ?? "—"}
+                Targeted retry: {sim.moment_score ?? 'Unassessed'}
               </span>
               {sim.moment_improved === null ? null : (
                 <span
@@ -205,13 +208,12 @@ export default function Scorecard() {
                   )}
                   data-testid="moment-retry-verdict"
                 >
-                  {sim.moment_improved ? "Much better ✓" : "Try that moment again"}
+                  {sim.moment_improved ? 'Higher targeted score' : 'No higher targeted score yet'}
                 </span>
               )}
             </div>
             <p className="mt-3 text-[12.5px] text-muted-foreground">
-              Your original score is preserved — this is practice after the assessment, not a
-              rewrite of it.
+              Same target skill and rubric, with coaching assistance. A tie is not improvement. The original full-call assessment is unchanged; this drill is excluded from full-call trends.
             </p>
           </section>
         ) : null}
@@ -221,10 +223,17 @@ export default function Scorecard() {
             className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-5 text-[13.5px] text-amber-900"
             data-testid="scorecard-no-evaluation"
           >
-            This call has no coaching analysis yet. End an active simulation to generate one.
+            {sim.status === 'abandoned' ? 'This call was abandoned without grading.' : ['grading', 'grading_failed', 'ending', 'analyzing'].includes(sim.status) ? 'Your conversation is frozen. Return to recover grading without reopening the call.' : 'This call has not been assessed yet.'}
+            {sim.status !== 'abandoned' ? <Link className='ml-3 underline' data-testid='scorecard-recover-call' to={`/simulation/${id}`}>Resume or recover call</Link> : null}
           </div>
         ) : (
           <>
+            <CoachObservation title={evaluation.misses[0]?.title || evaluation.coaching_priorities[0]?.skill || evaluation.headline}
+              detail={evaluation.misses[0]?.detail || evaluation.coaching_priorities[0]?.why || evaluation.objective_note}
+              quote={evaluation.misses[0]?.quote}
+              buyerQuote={evaluation.misses[0]?.turn_index != null ? sim.transcript[Math.max(0, evaluation.misses[0].turn_index - 1)]?.text : undefined}
+              onRetry={evaluation.misses.length ? () => retryMoment.mutate(0) : undefined} busy={retryMoment.isPending} />
+            <p className='mt-3 text-xs text-muted-foreground' data-testid='report-measurement-scope'>Single-call AI interpretation · {sim.assisted || sim.mode === 'moment' ? 'Coached practice' : 'Unaided practice'} · {evaluation.evidence_validated ? 'Exact quotation references validated' : 'Historical report — evidence was not independently validated'}. No raw audio is stored or replayed; vocal cues, interruptions and speaking-time measurements are unassessed.</p>
             <section className="mt-7 grid gap-6 rounded-xl border border-border bg-card p-6 lg:grid-cols-[auto_1fr]">
               <div className="flex flex-col items-center gap-3">
                 <ScoreRing score={evaluation.overall_score} testid="overall-score" />
@@ -256,12 +265,12 @@ export default function Scorecard() {
                 {m ? (
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
-                      { k: "Talk ratio", v: `${m.talk_ratio}%`, t: "talk-ratio" },
-                      { k: "Questions", v: String(m.question_count), t: "question-count" },
-                      { k: "Filler words", v: String(m.filler_words), t: "filler-words" },
+                      { k: "Your word share", v: `${m.talk_ratio}%`, t: "talk-ratio" },
+                      { k: "Question marks", v: String(m.question_count), t: "question-count" },
+                      { k: "Lexical fillers", v: String(m.filler_words), t: "filler-words" },
                       {
-                        k: "Objections handled",
-                        v: `${m.objections_handled}/${m.objection_count}`,
+                        k: "Objections (AI tags)",
+                        v: String(m.objection_count),
                         t: "objections",
                       },
                     ].map((s) => (
@@ -298,6 +307,8 @@ export default function Scorecard() {
                     />
                   ))}
                 </div>
+                <p className='mt-4 text-xs text-muted-foreground' data-testid='unassessed-skills'>Unassessed: {evaluation.unassessed_categories?.join(', ') || 'No additional categories reported'}. Missing evidence is not a zero score.</p>
+                <details className='mt-3 text-xs text-muted-foreground' data-testid='report-rubric'><summary data-testid='report-rubric-toggle'>Scoring method & versions</summary><p className='mt-2' data-testid='report-rubric-description'>Weighted average of assessed categories only. Focus skills weight 2; other applicable skills weight 1. Rubric: {evaluation.rubric_version || 'Legacy'} · Model: {evaluation.model_version || 'Unrecorded'} · Transcript version: {evaluation.transcript_version ?? 'Unrecorded'}. This is practice evidence, not certification.</p></details>
               </section>
 
               <div className="space-y-6">
@@ -353,7 +364,7 @@ export default function Scorecard() {
               </div>
             </section>
 
-            <section className="mt-6" data-testid="scorecard-attempts">
+            {sim.mode !== 'moment' ? <section className="mt-6" data-testid="scorecard-attempts">
               <h2 className="mb-3 font-heading text-[17px] font-bold">
                 Versus your previous attempts
               </h2>
@@ -362,7 +373,7 @@ export default function Scorecard() {
                 exerciseId={sim.exercise_id}
                 currentSimId={sim.id}
               />
-            </section>
+            </section> : null}
 
             <Tabs defaultValue="transcript" className="mt-6">
               <TabsList data-testid="review-tabs">
@@ -411,9 +422,8 @@ export default function Scorecard() {
                     <div className="mt-5 space-y-3" data-testid="transcript-review">
                       {sim.transcript.map((t, i) => {
                         const tags = momentsByTurn.get(i) ?? [];
-                        if (tagFilter && !tags.some((x) => x.tag === tagFilter)) return null;
                         return (
-                          <div key={`${i}-${t.speaker}`} data-testid={`transcript-turn-${i}`}>
+                          <div id={`exchange-${i}`} className='scroll-mt-24' key={`${i}-${t.speaker}`} data-testid={`transcript-turn-${i}`}>
                             <div
                               className={cn(
                                 "rounded-lg p-3.5 text-[13.5px] leading-relaxed",
@@ -462,7 +472,7 @@ export default function Scorecard() {
                         <button
                           key={`${mo.tag}-${mo.turn_index}-${i}`}
                           type="button"
-                          onClick={() => setTagFilter(mo.tag)}
+                          onClick={() => document.getElementById(`exchange-${mo.turn_index}`)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' })}
                           className="w-full rounded-md bg-secondary p-3 text-left"
                           data-testid={`moment-summary-${i}`}
                         >
@@ -492,7 +502,7 @@ export default function Scorecard() {
               <TabsContent value="analytics">
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   <section className="rounded-xl border border-border bg-card p-5">
-                    <h3 className="font-heading text-[15px] font-bold">Talk vs listen</h3>
+                    <h3 className="font-heading text-[15px] font-bold">Share of transcript words</h3>
                     <div className="h-[210px]" data-testid="talk-ratio-chart">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -511,13 +521,12 @@ export default function Scorecard() {
                       </ResponsiveContainer>
                     </div>
                     <p className="text-[12.5px] text-muted-foreground">
-                      You spoke {m?.talk_ratio ?? 0}% of the words. In discovery, strong reps usually
-                      sit between 30% and 45%.
+                      Your share is {m?.talk_ratio ?? 0}% of transcribed words. This is not speaking or listening time; no universal target is assumed.
                     </p>
                   </section>
 
                   <section className="rounded-xl border border-border bg-card p-5">
-                    <h3 className="font-heading text-[15px] font-bold">Question mix</h3>
+                    <h3 className="font-heading text-[15px] font-bold">Lexical question mix</h3>
                     <div className="h-[210px]" data-testid="question-mix-chart">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={questionData} margin={{ left: -20, top: 12 }}>
@@ -542,21 +551,20 @@ export default function Scorecard() {
                       </ResponsiveContainer>
                     </div>
                     <p className="text-[12.5px] text-muted-foreground">
-                      {m?.question_count ?? 0} questions total. Open questions create discovery;
-                      closed ones confirm.
+                      {m?.question_count ?? 0} question-mark-delimited phrases. Open-form heuristic: phrases beginning what, how, why, tell me or describe. Transcription punctuation can change these counts.
                     </p>
                   </section>
 
                   <section className="rounded-xl border border-border bg-card p-5">
-                    <h3 className="font-heading text-[15px] font-bold">Delivery</h3>
+                    <h3 className="font-heading text-[15px] font-bold">Text counts, not audio measurements</h3>
                     <div className="mt-4 space-y-3 text-[13px]" data-testid="delivery-metrics">
                       {[
                         { k: "Average response length", v: `${m?.avg_response_words ?? 0} words` },
-                        { k: "Longest monologue", v: `${m?.longest_monologue_words ?? 0} words` },
-                        { k: "Filler words", v: String(m?.filler_words ?? 0) },
+                        { k: "Longest rep turn", v: `${m?.longest_monologue_words ?? 0} words` },
+                        { k: "um / uh / erm / you know", v: String(m?.filler_words ?? 0) },
                         {
-                          k: "Objections handled",
-                          v: `${m?.objections_handled ?? 0} of ${m?.objection_count ?? 0}`,
+                          k: "Objection effectiveness",
+                          v: 'AI interpretation in coaching',
                         },
                       ].map((row) => (
                         <div
@@ -603,13 +611,13 @@ export default function Scorecard() {
             </Tabs>
 
             <div className="mt-8 flex flex-wrap justify-center gap-3 border-t border-border pt-6">
-              <Link
+              {sim.difficulty < 5 ? <Link
                 to={`/learn/${sim.exercise_id}?difficulty=${Math.min(5, sim.difficulty + 1)}`}
                 className={cn(buttonVariants({ variant: "outline" }))}
                 data-testid="scorecard-harder"
               >
                 Try one level harder
-              </Link>
+              </Link> : null}
               <Link to="/dashboard" className={cn(buttonVariants({ variant: "ghost" }))} data-testid="scorecard-dashboard">
                 Back to dashboard
               </Link>
@@ -621,6 +629,7 @@ export default function Scorecard() {
                 Export debrief
               </Button>
             </div>
+            <ReportFeedback simulationId={id} />
           </>
         )}
       </div>

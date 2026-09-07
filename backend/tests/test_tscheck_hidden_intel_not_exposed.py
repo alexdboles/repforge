@@ -6,7 +6,7 @@ GET /api/simulations/{id} for an active simulation must not contain 'hidden' or
 
 import pytest
 
-from .conftest import api_url, signup_user
+from .conftest import api_url, activate_sim, signup_user
 
 TIMEOUT = 180.0
 
@@ -40,6 +40,8 @@ def test_hidden_intel_hidden_while_active_then_revealed_after_complete(rep_user)
     active_scenario = get_active.json()["scenario"]
     assert "hidden" not in active_scenario, active_scenario.keys()
     assert "personality" not in active_scenario, active_scenario.keys()
+
+    activate_sim(c, sim_id)
 
     turn = c.post(
         api_url(f"/simulations/{sim_id}/turns"),

@@ -68,3 +68,11 @@ def signup_user(name_prefix: str, timeout: float = 60.0) -> tuple[httpx.Client, 
     token = body["token"]
     c.headers["Authorization"] = f"Bearer {token}"
     return c, user_id, token
+
+
+def activate_sim(c: httpx.Client, sim_id: str) -> dict:
+    """Simulations now start in 'preparation' (brief/mic-check gate) and must be
+    explicitly activated before /turns accepts speech. Returns the activated body."""
+    r = c.post(api_url(f"/simulations/{sim_id}/activate"))
+    assert r.status_code == 200, r.text
+    return r.json()

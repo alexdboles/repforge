@@ -43,8 +43,7 @@ export default function Progress() {
           Progress & competency
         </h1>
         <p className="mt-1.5 max-w-2xl text-[14px] text-muted-foreground">
-          Repetition only counts if it changes the numbers. This is where your improvement is
-          measured, skill by skill.
+          Review score history and skill coverage. Comparable assessments share a scenario, difficulty, rubric and assistance setting; mixed scores are not proof of improvement.
         </p>
 
         {isLoading ? (
@@ -92,10 +91,10 @@ export default function Progress() {
               />
               <StatCard
                 testid="progress-stat-improvement"
-                label="Improvement"
+                label="Comparable change"
                 value={`${d.improvement > 0 ? "+" : ""}${d.improvement}`}
                 tone={d.improvement >= 0 ? "text-emerald-600" : "text-red-600"}
-                hint="Latest half vs first half"
+                hint="Same-scenario unaided assessments only"
               />
               <StatCard
                 testid="progress-stat-tier"
@@ -174,7 +173,7 @@ export default function Progress() {
                 <div>
                   <h2 className="font-heading text-[17px] font-bold">Attempt comparison</h2>
                   <p className="text-[12.5px] text-muted-foreground">
-                    Same skill, repeated. This is where improvement stops being a feeling.
+                    Evidence-validated comparable full calls only. Coached moment drills stay separate.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2" data-testid="comparison-exercise-picker">
@@ -206,7 +205,7 @@ export default function Progress() {
 
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
               <section className="rounded-xl border border-border bg-card p-5">
-                <h2 className="font-heading text-[17px] font-bold">Skill averages & movement</h2>
+                <h2 className="font-heading text-[17px] font-bold">Assessed skill averages & score history</h2>
                 <div className="mt-4 divide-y divide-border" data-testid="progress-skills">
                   {d.skills.map((s) => (
                     <div key={s.category} className="flex items-center gap-4">

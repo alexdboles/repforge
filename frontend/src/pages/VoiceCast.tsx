@@ -1,9 +1,9 @@
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Play, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, authHeaders } from "@/lib/api";
+import { apiGet, apiAudio } from "@/lib/api";
 import { getUserId } from "@/lib/profile";
 import type { CastVoice } from "@/lib/types";
 import AppShell from "@/components/AppShell";
@@ -23,30 +23,34 @@ export default function VoiceCast() {
   const [playing, setPlaying] = useState<string | null>(null);
   const [line, setLine] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const urlRef = useRef<string | null>(null);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; abortRef.current?.abort(); audioRef.current?.pause(); if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["voice-cast"],
     queryFn: () => apiGet<CastVoice[]>("/voice/cast"),
     retry: false,
   });
 
   const preview = async (character: string) => {
+    const gen = ++generation.current;
+    abortRef.current?.abort();
+    const ctrl = new AbortController(); abortRef.current = ctrl;
     audioRef.current?.pause();
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     setPlaying(character);
     try {
-      const res = await fetch("/api/voice/speak", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ text: TEST_LINES[line], character, difficulty: 3 }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      const audio = new Audio(URL.createObjectURL(await res.blob()));
+      const blob = await apiAudio('/voice/qa-sample', { character, line }, ctrl.signal);
+      if (gen !== generation.current) return;
+      const url = URL.createObjectURL(blob); urlRef.current = url;
+      const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onended = () => setPlaying(null);
+      audio.onended = () => { if (gen === generation.current) setPlaying(null); };
       await audio.play();
-    } catch (err) {
-      console.error("voice preview failed", err);
+    } catch {
+      if (gen !== generation.current || ctrl.signal.aborted) return;
       setPlaying(null);
       toast.error(`${character}'s voice could not be produced.`);
     }
@@ -62,9 +66,10 @@ export default function VoiceCast() {
           Every recurring buyer keeps one permanent ElevenLabs voice — no random assignment and no
           browser-speech fallback. Listen to each one on the same test line before shipping.
         </p>
+        {isError ? <p className='mt-4 text-sm text-amber-800' data-testid='voice-cast-access-error'>Voice QA requires platform administrator access. If authorised, retry later when the provider is available.</p> : null}
 
         <div className="mt-6 flex flex-wrap gap-2" data-testid="voice-test-lines">
-          {TEST_LINES.map((l, i) => (
+          {TEST_LINES.map((_, i) => (
             <button
               key={i}
               type="button"

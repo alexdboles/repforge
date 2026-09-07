@@ -182,6 +182,10 @@ class UserProfile(BaseModel):
     role: str = "Sales Professional"
     experience_level: str = "New"
     org: str = "Personal"
+    workspace_id: str = ""
+    workspace_role: str = "member"
+    is_guest: bool = False
+    is_admin: bool = False
     xp: int = 0
     level: int = 1
     streak: int = 0
@@ -218,6 +222,24 @@ class MomentRetryRequest(BaseModel):
     miss_index: int = Field(default=0, ge=0, le=20)
 
 
+class InvitationCreate(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+    role: Literal['member', 'manager'] = 'member'
+
+
+class InvitationResponse(BaseModel):
+    token: str
+    expires_at: datetime
+
+
+class InvitationAccept(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+
+
+class Health(BaseModel):
+    status: Literal['ok'] = 'ok'
+
+
 class LoginRequest(BaseModel):
     email: str = Field(max_length=200)
     password: str = Field(max_length=200)
@@ -225,6 +247,8 @@ class LoginRequest(BaseModel):
 
 # ---------- simulations ----------
 class TranscriptTurn(BaseModel):
+    id: str = Field(default_factory=_uid)
+    request_key: str = ''
     speaker: Literal["rep", "prospect"]
     text: str
     at: float = 0.0
@@ -238,28 +262,36 @@ class SimulationStart(BaseModel):
     custom_scenario_id: Optional[str] = None
     journey_id: Optional[str] = None
     mode: Literal["guided", "business", "journey", "moment"] = "guided"
+    assignment_id: Optional[str] = None
+    is_demo: bool = False
 
 
 class TurnRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=2000)
     at: float = 0.0
+    idempotency_key: str = Field(default_factory=_uid, max_length=80, min_length=8)
+    expected_version: Optional[int] = Field(default=None, ge=0)
 
 
 class TurnResponse(BaseModel):
     reply: str
     turn_index: int
+    version: int = 0
+    transcript: list[TranscriptTurn] = []
 
 
 class CategoryScore(BaseModel):
     category: str = "General"
     score: int = 0
     note: str = ""
+    evidence: list[dict[str, Any]] = []
 
 
 class Strength(BaseModel):
     title: str = "Strength"
     detail: str = ""
     quote: str = ""
+    turn_index: Optional[int] = None
 
 
 class Miss(BaseModel):
@@ -267,6 +299,8 @@ class Miss(BaseModel):
     detail: str = ""
     quote: str = ""
     better_approach: str = ""
+    turn_index: Optional[int] = None
+    category: str = ''
 
 
 class CoachingPriority(BaseModel):
@@ -285,6 +319,8 @@ class Metrics(BaseModel):
     longest_monologue_words: int = 0
     objection_count: int = 0
     objections_handled: int = 0
+    rep_words: int = 0
+    prospect_words: int = 0
 
 
 class Moment(BaseModel):
@@ -307,6 +343,12 @@ class Evaluation(BaseModel):
     moments: list[Moment] = []
     objective_met: bool = False
     objective_note: str = ""
+    unassessed_categories: list[str] = []
+    rubric_version: str = 'legacy-unvalidated'
+    rubric_weights: dict[str, int] = {}
+    model_version: str = 'legacy-unrecorded'
+    transcript_version: int = 0
+    evidence_validated: bool = False
 
 
 class Simulation(BaseModel):
@@ -317,7 +359,21 @@ class Simulation(BaseModel):
     difficulty: int
     difficulty_name: str
     scenario: dict[str, Any]
-    status: Literal["active", "analyzing", "completed"] = "active"
+    status: Literal['preparation', 'active', 'ending', 'grading', 'grading_failed', 'analyzing', 'completed', 'abandoned'] = 'preparation'
+    version: int = 0
+    frozen_version: Optional[int] = None
+    call_started_at: Optional[datetime] = None
+    assignment_id: Optional[str] = None
+    assisted: bool = False
+    is_demo: bool = False
+    voice_config: dict[str, Any] = {}
+    rubric_version: str = 'consultative-v1'
+    grading_error: str = ''
+    rubric_snapshot: dict[str, Any] = {}
+    moment_category: str = ''
+    moment_baseline: Optional[int] = None
+    moment_score: Optional[int] = None
+    source_turn_index: Optional[int] = None
     mode: Literal["guided", "business", "journey", "moment"] = "guided"
     # Retry That Moment: this run re-plays one coaching moment from an earlier call.
     retry_of: Optional[str] = None
@@ -389,7 +445,7 @@ class JourneyView(BaseModel):
 
 class ReadinessCategory(BaseModel):
     category: str
-    score: int
+    score: Optional[int] = None
     weight: int
     attempts: int
 
@@ -430,6 +486,8 @@ class AttemptSeries(BaseModel):
     category_deltas: dict[str, int] = {}
     most_improved: Optional[str] = None
     still_weakest: Optional[str] = None
+    comparison_kind: Literal['matched_assessment', 'coached_source'] = 'matched_assessment'
+    comparison_note: str = 'Same scenario, difficulty, rubric, context and assistance setting.'
 
 
 # ---------- dashboard / progress ----------
@@ -468,6 +526,8 @@ class AssignmentCreate(BaseModel):
 class Assignment(BaseModel):
     id: str = Field(default_factory=_uid)
     user_id: str
+    workspace_id: str = ""
+    membership_unverified: bool = False
     user_name: str = ""
     org: str = ""
     exercise_id: str
@@ -536,6 +596,10 @@ class Dashboard(BaseModel):
     readiness: Readiness
     assignments: list[Assignment] = []
     completed: int
+    full_calls: int = 0
+    moment_drills: int = 0
+    assisted_calls: int = 0
+    assessed_calls: int = 0
     average_score: int
     recent_score: Optional[int] = None
     improvement: int = 0

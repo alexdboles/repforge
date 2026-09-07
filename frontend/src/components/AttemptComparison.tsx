@@ -20,8 +20,8 @@ export default function AttemptComparison({
   compact?: boolean;
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["attempts", userId, exerciseId],
-    queryFn: () => apiGet<AttemptSeries>(`/users/${userId}/attempts/${exerciseId}`),
+    queryKey: ["attempts", userId, exerciseId, currentSimId],
+    queryFn: () => apiGet<AttemptSeries>(`/users/${userId}/attempts/${exerciseId}${currentSimId ? `?simulation_id=${currentSimId}` : ''}`),
     enabled: Boolean(userId && exerciseId),
     retry: false,
   });
@@ -38,8 +38,7 @@ export default function AttemptComparison({
         className="rounded-xl border border-dashed border-border bg-card p-5 text-[13px] text-muted-foreground"
         data-testid="attempts-need-more"
       >
-        Run {data.exercise_name} once more and this panel compares the attempts side by side —
-        overall score, every competency and what changed.
+        Comparable results need two evidence-validated full calls with the same scenario, difficulty, rubric, context and assistance setting. Moment drills are separate.
       </div>
     );
   }
@@ -56,11 +55,12 @@ export default function AttemptComparison({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-heading text-[17px] font-bold">
-            {data.exercise_name} · attempt {attempts.length}
+            {data.comparison_kind === 'coached_source' ? 'Coached retry vs original' : `${data.exercise_name} · attempt ${attempts.length}`}
           </h3>
           <p className="text-[12.5px] text-muted-foreground">
-            First attempt {data.first_score} → latest {data.latest_score} · best {data.best_score}
+            Same-scenario score history · first {data.first_score} → latest {data.latest_score} · best {data.best_score}. Not a real-world readiness certification.
           </p>
+          <p className='mt-2 max-w-2xl text-xs text-muted-foreground' data-testid='comparison-methodology'>{data.comparison_note}</p>
         </div>
         <span
           className={cn(
@@ -90,7 +90,7 @@ export default function AttemptComparison({
         {data.most_improved ? (
           <div className="rounded-md bg-emerald-50 p-3" data-testid="most-improved">
             <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-              Most improved
+              {data.comparison_kind === 'coached_source' ? 'Higher shared skill score' : 'Most improved assessed skill'}
             </div>
             <div className="mt-1 text-[14px] font-bold text-emerald-900">
               {data.most_improved} {data.category_deltas[data.most_improved] > 0 ? "+" : ""}

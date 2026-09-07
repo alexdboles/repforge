@@ -37,16 +37,16 @@ async def dashboard(user_id: str, me: dict = Depends(current_user)):
         raise HTTPException(status_code=404, detail="User not found")
     sims = (
         await db.simulations.find(
-            {"user_id": user_id, "status": "completed"}, {"_id": 0}
+            {"user_id": user_id, "status": "completed"}, {"_id": 0, 'frozen_transcript': 0, 'baseline_evaluation': 0}
         )
         .sort("started_at", 1)
-        .to_list(500)
+        .to_list(None)
     )
     data = build_dashboard(user, sims)
     data["assignments"] = (
-        await db.assignments.find({"user_id": user_id}, {"_id": 0})
+        await db.assignments.find({"user_id": user_id, 'status': 'pending'}, {"_id": 0})
         .sort("created_at", -1)
-        .to_list(20)
+        .to_list(None)
     )
     if set(data["user"]["badges"]) != set(user.get("badges") or []):
         await db.users.update_one(

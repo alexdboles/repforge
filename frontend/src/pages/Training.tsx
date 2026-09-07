@@ -50,7 +50,7 @@ export default function Training() {  const userId = getUserId();
   const [level, setLevel] = useState(Number(params.get("difficulty") ?? 2) || 2);
   const [scenarioIdx, setScenarioIdx] = useState(0);
 
-  const { data: exercises } = useQuery({
+  const { data: exercises, isError: exerciseError, refetch: retryExercises } = useQuery({
     queryKey: ["exercises"],
     queryFn: () => apiGet<Exercise[]>("/exercises"),
     retry: false,
@@ -60,7 +60,7 @@ export default function Training() {  const userId = getUserId();
     queryFn: () => apiGet<Difficulty[]>("/difficulties"),
     retry: false,
   });
-  const { data: scenarios, isLoading: loadingScenarios } = useQuery({
+  const { data: scenarios, isLoading: loadingScenarios, isError: scenarioError, refetch: retryScenarios } = useQuery({
     queryKey: ["scenarios", exerciseId],
     queryFn: () => apiGet<ScenarioBrief[]>(`/exercises/${exerciseId}/scenarios`),
     retry: false,
@@ -92,9 +92,7 @@ export default function Training() {  const userId = getUserId();
   const unlocked = dash?.unlocked_difficulty ?? 2;
   // Only treat a skill as locked once we actually know the rep's training record —
   // otherwise the button flashes disabled while the profile is still loading.
-  const gateKnown = Boolean(user);
-  const trained = Boolean(user?.trained_skills?.includes(exerciseId));
-  const locked = gateKnown && !trained;
+  const locked = false; // Training stays available, never blocks a returning rep's practice.
 
   useEffect(() => {
     setParams({ exercise: exerciseId, difficulty: String(level) }, { replace: true });
@@ -130,6 +128,8 @@ export default function Training() {  const userId = getUserId();
           Every skill runs the full loop: <span className="font-semibold text-foreground">Learn → Prepare → Simulate → Coaching → Retry</span>. Some
           scenario information is deliberately withheld — you have to earn it in conversation.
         </p>
+
+        {exerciseError || scenarioError ? <div className='mt-5 rounded border border-amber-300 p-4 text-sm' role='alert' data-testid='library-error'>Some training data could not load.<Button className='ml-3' data-testid='library-retry' variant='outline' onClick={() => { void retryExercises(); void retryScenarios(); }}>Retry library</Button></div> : null}
 
         <section className="mt-8" data-testid="journeys-section">
           <div className="flex flex-wrap items-end justify-between gap-3">

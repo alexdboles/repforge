@@ -2,6 +2,17 @@
 
 No secrets in this document.
 
+## Current hardening status (supersedes historical notes below)
+
+Authoritative current description: `docs/ARCHITECTURE.md` and `docs/VALIDATION.md`.
+Sessions prefer an HttpOnly cookie, retain a 12-hour tab-scoped sessionStorage bearer
+fallback, verify revocation epoch and revoke on logout. Workspace IDs and verified
+membership—not organisation names—control team access. Mongo-backed TTL budgets and
+leases are shared; voice generation is tied to owned saved prospect turns. Upstream
+error bodies are not logged or returned. Frozen grading validates exact evidence and
+allows one bounded repair, with idempotent reward recovery.
+The previous sections below are historical and must not be used as current security claims.
+
 ## Secret management
 All credentials live in `backend/.env`, loaded with python-dotenv and read via
 `os.environ` on the server: `JWT_SECRET`, `OPENAI_API_KEY`, `EMERGENT_LLM_KEY`,

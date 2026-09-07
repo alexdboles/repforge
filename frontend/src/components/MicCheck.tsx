@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Mic, Play, RefreshCw, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { authHeaders } from "@/lib/api";
+import { apiAudio } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { speechSupported } from '@/lib/voice';
 
 const SESSION_FLAG = "repforge.audio_verified";
 
 type MicState = "idle" | "asking" | "listening" | "heard" | "denied";
-type VoiceState = "idle" | "loading" | "ready" | "failed";
+type VoiceState = "idle" | "loading" | "ready" | "failed" | 'confirm';
 
 export function audioAlreadyVerified(): boolean {
   try {
-    return sessionStorage.getItem(SESSION_FLAG) === "1";
+    return false; // Every call confirms its own saved buyer voice; skipping never verifies.
   } catch (err) {
     console.error("sessionStorage read failed", err);
     return false;
@@ -33,11 +34,15 @@ function markVerified() {
 export default function MicCheck({
   prospectName,
   difficulty,
+  simulationId,
   onStart,
+  busy = false,
 }: {
   prospectName: string;
   difficulty: number;
-  onStart: () => void;
+  simulationId: string;
+  onStart: (typedMode?: boolean) => void;
+  busy?: boolean;
 }) {
   const [micState, setMicState] = useState<MicState>("idle");
   const [level, setLevel] = useState(0);
@@ -46,24 +51,36 @@ export default function MicCheck({
   const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const micGeneration = useRef(0);
+  const voiceGeneration = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const urlRef = useRef<string | null>(null);
 
   const teardown = useCallback(() => {
+    micGeneration.current += 1;
+    voiceGeneration.current += 1;
+    abortRef.current?.abort();
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     void ctxRef.current?.close().catch(() => undefined);
     ctxRef.current = null;
-    audioRef.current?.pause();
+    if (audioRef.current) { audioRef.current.onended = null; audioRef.current.onerror = null; audioRef.current.pause(); }
     audioRef.current = null;
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = null;
   }, []);
 
   useEffect(() => teardown, [teardown]);
 
   const startMic = useCallback(async () => {
+    const gen = ++micGeneration.current;
+    streamRef.current?.getTracks().forEach(t => t.stop());
     setMicState("asking");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (gen !== micGeneration.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       const ctx = new AudioContext();
       ctxRef.current = ctx;
@@ -73,6 +90,7 @@ export default function MicCheck({
       const data = new Uint8Array(analyser.frequencyBinCount);
       setMicState("listening");
       const tick = () => {
+        if (gen !== micGeneration.current) return;
         analyser.getByteFrequencyData(data);
         const peak = data.reduce((m, v) => Math.max(m, v), 0) / 255;
         setLevel(peak);
@@ -80,43 +98,44 @@ export default function MicCheck({
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
-    } catch (err) {
-      console.error("microphone permission or device unavailable", err);
+    } catch {
+      if (gen !== micGeneration.current) return;
       setMicState("denied");
     }
   }, []);
 
   const testVoice = useCallback(async () => {
+    const gen = ++voiceGeneration.current;
+    abortRef.current?.abort();
+    if (audioRef.current) { audioRef.current.onended = null; audioRef.current.onerror = null; audioRef.current.pause(); }
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setVoiceState("loading");
     try {
-      const res = await fetch("/api/voice/speak", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          text: `Hey, this is ${prospectName.split(" ")[0]}.`,
-          character: prospectName,
-          difficulty,
-        }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      const audio = new Audio(URL.createObjectURL(await res.blob()));
+      const blob = await apiAudio('/voice/sample', { simulation_id: simulationId }, ctrl.signal);
+      if (gen !== voiceGeneration.current) return;
+      const url = URL.createObjectURL(blob);
+      urlRef.current = url;
+      const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onended = () => setVoiceState("ready");
+      audio.onended = () => { if (gen === voiceGeneration.current) setVoiceState('confirm'); };
+      audio.onerror = () => { if (gen === voiceGeneration.current) setVoiceState('failed'); };
       await audio.play();
-      setVoiceState("ready");
-    } catch (err) {
-      console.error("buyer voice test failed", err);
+      if (gen === voiceGeneration.current) setVoiceState('confirm');
+    } catch {
+      if (gen !== voiceGeneration.current || ctrl.signal.aborted) return;
       setVoiceState("failed");
     }
-  }, [prospectName, difficulty]);
+  }, [prospectName, difficulty, simulationId]);
 
-  const ready = (micState === "heard" || micState === "denied") && voiceState === "ready";
+  const ready = micState === 'heard' && voiceState === 'ready' && speechSupported();
 
-  const begin = () => {
-    markVerified();
+  const begin = (mode: 'verified' | 'skipped' | 'typed') => {
+    if (mode === 'verified' && ready) markVerified();
+    sessionStorage.setItem('repforge.audio_check', JSON.stringify({ skipped: mode === 'skipped', microphone_access: ['heard', 'listening'].includes(micState), speech_recognition_supported: speechSupported(), playback_confirmed: voiceState === 'ready', mode }));
     teardown();
-    onStart();
+    onStart(mode === 'typed');
   };
 
   return (
@@ -130,6 +149,8 @@ export default function MicCheck({
 
         <MicPanel state={micState} level={level} onTest={startMic} />
         <VoicePanel prospectName={prospectName} state={voiceState} onTest={testVoice} />
+        <p className='mt-3 text-xs text-slate-400' data-testid='mic-check-limitations'>The meter detects sound, not words. {speechSupported() ? 'Speech recognition is available; verify captured words in the call transcript.' : 'This browser cannot transcribe speech. Choose typed practice.'}</p>
+        {voiceState === 'confirm' ? <div className='mt-3 flex flex-wrap items-center gap-2' data-testid='audio-confirmation'><span>Did you hear the buyer?</span><Button size='sm' data-testid='audio-confirm-yes' onClick={() => setVoiceState('ready')}>Yes, I heard it</Button><Button size='sm' variant='secondary' data-testid='audio-confirm-no' onClick={() => setVoiceState('failed')}>No — try again</Button></div> : null}
 
         {ready ? (
           <p
@@ -145,8 +166,8 @@ export default function MicCheck({
           <Button
             size="lg"
             className="font-semibold"
-            onClick={begin}
-            disabled={!ready}
+            onClick={() => begin('verified')}
+            disabled={!ready || busy}
             data-testid="mic-check-start"
           >
             Start simulation
@@ -155,11 +176,13 @@ export default function MicCheck({
             size="lg"
             variant="ghost"
             className="font-semibold text-slate-300 hover:bg-slate-800"
-            onClick={begin}
+            onClick={() => begin('skipped')}
+            disabled={busy}
             data-testid="mic-check-skip"
           >
             Skip check
           </Button>
+          <Button variant='secondary' data-testid='mic-check-typed' disabled={busy} onClick={() => begin('typed')}>Use typed practice</Button>
         </div>
       </div>
     </div>
@@ -171,7 +194,7 @@ const MIC_LABEL: Record<MicState, string> = {
   idle: "Not tested",
   asking: "Requesting permission…",
   listening: "Connected — say something",
-  heard: "We can hear you ✓",
+  heard: "Input activity detected ✓",
   denied: "No microphone — you can type instead",
 };
 
@@ -230,7 +253,7 @@ function MicPanel({
           {state === "denied" ? (
             <>
               <RefreshCw className="size-3.5" />
-              Change microphone / retry
+              Retry microphone access
             </>
           ) : (
             "Test my microphone"
@@ -245,6 +268,7 @@ const VOICE_LABEL: Record<VoiceState, string> = {
   idle: "Not tested",
   loading: "Preparing…",
   ready: "Ready ✓",
+  confirm: 'Please confirm you heard it',
   failed: "Voice connection failed",
 };
 

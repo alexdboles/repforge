@@ -9,7 +9,7 @@ into _guard_turn + _prospect_reply.
 
 import pytest
 
-from .conftest import api_url, signup_user
+from .conftest import api_url, activate_sim, signup_user
 
 TIMEOUT = 120.0
 
@@ -32,6 +32,7 @@ def _start_sim(c, user_id):
         },
     )
     assert r.status_code == 200, r.text
+    activate_sim(c, r.json()["id"])
     return r.json()["id"]
 
 

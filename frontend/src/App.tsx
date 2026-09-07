@@ -14,12 +14,14 @@ import BusinessSetup from "@/pages/BusinessSetup";
 import Team from "@/pages/Team";
 import VoiceCast from "@/pages/VoiceCast";
 import SampleReport from "@/pages/SampleReport";
+import SessionBoundary from '@/components/SessionBoundary';
+import EvidencePage from '@/pages/Evidence';
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   return (
     <>
-      <Routes>
+      <SessionBoundary><Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/training" element={<Training />} />
@@ -32,11 +34,12 @@ export default function App() {
         <Route path="/team" element={<Team />} />
         <Route path="/voice-cast" element={<VoiceCast />} />
         <Route path="/sample-report" element={<SampleReport />} />
+        <Route path='/owner/evidence' element={<EvidencePage />} />
         <Route path="/progress" element={<Progress />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Landing />} />
-      </Routes>
+      </Routes></SessionBoundary>
       <Toaster position="top-right" richColors />
     </>
   );

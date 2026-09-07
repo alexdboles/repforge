@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, Flame, LogOut, Trophy, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
-import { clearToken, clearUserId, formatDuration, getUserId } from "@/lib/profile";
+import { apiGet, apiPatch } from "@/lib/api";
+import { formatDuration, getUserId } from "@/lib/profile";
+import { endSession } from '@/lib/session';
 import type { Dashboard as DashboardData, UserProfile } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { StatCard } from "@/components/Metrics";
@@ -23,7 +24,6 @@ const LEVELS: Record<string, string> = {
 
 export default function Profile() {
   const userId = getUserId();
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: user } = useQuery({
     queryKey: ["user", userId],
@@ -114,13 +114,12 @@ export default function Profile() {
                 <Input
                   id="p-org"
                   value={org}
-                  onChange={(e) => setOrg(e.target.value)}
+                  readOnly
                   className="mt-1.5"
                   data-testid="profile-org-input"
                 />
                 <p className="mt-1.5 text-[12px] text-muted-foreground">
-                  Reps sharing an organisation roll up into team reporting — the manager view is the
-                  next stage of the roadmap.
+                  Display name only. Workspace access requires an invitation; matching names never grants access.
                 </p>
               </div>
               <Button
@@ -136,14 +135,7 @@ export default function Profile() {
             <div className="mt-6 border-t border-border pt-5">
               <Button
                 variant="ghost"
-                onClick={async () => {
-                  // Server-side session teardown first, then clear local caches.
-                  await apiPost("/auth/logout").catch(() => undefined);
-                  clearUserId();
-                  clearToken();
-                  qc.clear();
-                  navigate("/");
-                }}
+                onClick={() => void endSession()}
                 data-testid="profile-logout-button"
                 className="text-muted-foreground"
               >
@@ -206,7 +198,7 @@ export default function Profile() {
               <StatCard
                 testid="profile-stat-best"
                 label="Personal best"
-                value={dash?.personal_best ? String(dash.personal_best) : "—"}
+                value={dash?.personal_best != null ? String(dash.personal_best) : "—"}
               />
               <StatCard
                 testid="profile-stat-tier"

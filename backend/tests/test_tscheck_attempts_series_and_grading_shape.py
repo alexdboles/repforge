@@ -11,7 +11,7 @@ and (with 2+ attempts) category_deltas/most_improved/still_weakest.
 import httpx
 import pytest
 
-from .conftest import api_url, signup_user
+from .conftest import api_url, activate_sim, signup_user
 
 TIMEOUT = 180.0
 
@@ -37,6 +37,7 @@ def _complete_call(c: httpx.Client, user_id: str, text: str) -> dict:
     )
     assert start.status_code == 200, start.text
     sim_id = start.json()["id"]
+    activate_sim(c, sim_id)
 
     turn = c.post(api_url(f"/simulations/{sim_id}/turns"), json={"text": text, "at": 5.0})
     assert turn.status_code == 200, turn.text

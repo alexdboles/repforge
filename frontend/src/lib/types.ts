@@ -54,6 +54,10 @@ export interface UserProfile {
   role: string;
   experience_level: string;
   org: string;
+  workspace_id: string;
+  workspace_role: string;
+  is_guest: boolean;
+  is_admin: boolean;
   xp: number;
   level: number;
   streak: number;
@@ -163,6 +167,8 @@ export interface VoiceStatus {
 }
 
 export interface TranscriptTurn {
+  id?: string;
+  request_key?: string;
   speaker: "rep" | "prospect";
   text: string;
   at: number;
@@ -171,18 +177,22 @@ export interface TranscriptTurn {
 export interface TurnResponse {
   reply: string;
   turn_index: number;
+  version: number;
+  transcript: TranscriptTurn[];
 }
 
 export interface CategoryScore {
   category: string;
   score: number;
   note: string;
+  evidence?: Evidence[];
 }
 
 export interface Strength {
   title: string;
   detail: string;
   quote: string;
+  turn_index?: number | null;
 }
 
 export interface Miss {
@@ -190,6 +200,8 @@ export interface Miss {
   detail: string;
   quote: string;
   better_approach: string;
+  turn_index?: number | null;
+  category?: string;
 }
 
 export interface CoachingPriority {
@@ -208,6 +220,8 @@ export interface Metrics {
   longest_monologue_words: number;
   objection_count: number;
   objections_handled: number;
+  rep_words?: number;
+  prospect_words?: number;
 }
 
 export interface Moment {
@@ -230,6 +244,12 @@ export interface Evaluation {
   moments: Moment[];
   objective_met: boolean;
   objective_note: string;
+  unassessed_categories?: string[];
+  rubric_version?: string;
+  rubric_weights?: Record<string, number>;
+  model_version?: string;
+  transcript_version?: number;
+  evidence_validated?: boolean;
 }
 
 export interface Simulation {
@@ -240,7 +260,21 @@ export interface Simulation {
   difficulty: number;
   difficulty_name: string;
   scenario: ScenarioBrief;
-  status: "active" | "analyzing" | "completed";
+  status: 'preparation' | 'active' | 'ending' | 'grading' | 'grading_failed' | 'analyzing' | 'completed' | 'abandoned';
+  version: number;
+  frozen_version: number | null;
+  call_started_at: string | null;
+  assignment_id: string | null;
+  assisted: boolean;
+  is_demo: boolean;
+  voice_config: Record<string, unknown>;
+  rubric_version: string;
+  grading_error: string;
+  rubric_snapshot: Record<string, unknown>;
+  moment_category: string;
+  moment_baseline: number | null;
+  moment_score: number | null;
+  source_turn_index: number | null;
   mode: "guided" | "business" | "journey" | "moment";
   // Retry That Moment (mirrors backend Simulation)
   retry_of: string | null;
@@ -357,7 +391,7 @@ export interface JourneyView {
 
 export interface ReadinessCategory {
   category: string;
-  score: number;
+  score: number | null;
   weight: number;
   attempts: number;
 }
@@ -382,6 +416,8 @@ export interface Nudge {
 export interface Assignment {
   id: string;
   user_id: string;
+  workspace_id: string;
+  membership_unverified: boolean;
   user_name: string;
   org: string;
   exercise_id: string;
@@ -403,6 +439,10 @@ export interface Dashboard {
   readiness: Readiness;
   assignments: Assignment[];
   completed: number;
+  full_calls: number;
+  moment_drills: number;
+  assisted_calls: number;
+  assessed_calls: number;
   average_score: number;
   recent_score: number | null;
   improvement: number;
@@ -445,6 +485,8 @@ export interface AttemptSeries {
   category_deltas: Record<string, number>;
   most_improved: string | null;
   still_weakest: string | null;
+  comparison_kind: 'matched_assessment' | 'coached_source';
+  comparison_note: string;
 }
 
 export interface TeamMember {
@@ -495,3 +537,23 @@ export interface SessionResponse {
   user: UserProfile;
   token: string;
 }
+
+export interface InvitationCreate { email: string; role: "member" | "manager" }
+export interface InvitationResponse { token: string; expires_at: string }
+export interface InvitationAccept { token: string }
+export interface Health { status: "ok" }
+export interface SpeakRequest { simulation_id: string; turn_id?: string; text?: string; character?: string; persona?: string; difficulty?: number }
+export interface SampleRequest { simulation_id: string }
+export interface QASampleRequest { character: string; line?: number }
+export interface FeedbackRequest { simulation_id: string; rating: number }
+export interface FeedbackResponse { saved: boolean }
+export interface EvidenceSummary { start: string; end: string; sample_size: number; demo_starts: number; first_replies: number; completed_grading: number; completion_rate: number; returning_users: number; retry_starts: number; retry_completions: number; comparable_improvements: number; feedback_count: number; feedback_average: number | null; note: string }
+export interface TurnRequest { text: string; at?: number; idempotency_key?: string; expected_version?: number }
+export interface SimulationStart { user_id: string; exercise_id: string; difficulty: number; scenario_id?: string; custom_scenario_id?: string; journey_id?: string; mode?: 'guided' | 'business' | 'journey' | 'moment'; assignment_id?: string; is_demo?: boolean }
+export interface Evidence { turn_index: number; quote: string }
+export interface AssessedCategory { category: string; score: number; note: string; evidence: Evidence[] }
+export interface AssessedStrength { title: string; detail: string; quote: string; turn_index: number }
+export interface AssessedMiss extends AssessedStrength { better_approach: string; category: string }
+export interface AssessedPriority { skill: string; why: string; drill: string }
+export interface AssessedMoment { tag: string; turn_index: number; explanation: string }
+export interface GradeDraft { overall_score: number; headline: string; category_scores: AssessedCategory[]; strengths: AssessedStrength[]; misses: AssessedMiss[]; coaching_priorities: AssessedPriority[]; recommended_exercise_id: string; recommended_difficulty: number; recommended_reason: string; metrics: Record<string, unknown>; moments: AssessedMoment[]; objective_met: boolean; objective_note: string }

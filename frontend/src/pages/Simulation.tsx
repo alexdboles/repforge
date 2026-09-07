@@ -19,7 +19,7 @@ import type { Hint } from "@/lib/types";
 import type { Simulation, TranscriptTurn, TurnResponse } from "@/lib/types";
 import { useMic, useProspectVoice } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
-import MicCheck, { audioAlreadyVerified } from "@/components/MicCheck";
+import MicCheck from "@/components/MicCheck";
 import WaveBars from "@/components/WaveBars";
 import TranscriptPanel from "@/components/TranscriptPanel";
 import ReplyComposer from "@/components/ReplyComposer";
@@ -65,7 +65,12 @@ export default function SimulationPage() {
   const openedRef = useRef(false);
   // Audio readiness gate: the graded call (and the prospect's opening line) only
   // begins once the rep has passed — or skipped — the check.
-  const [callStarted, setCallStarted] = useState(audioAlreadyVerified());
+  const [callStarted, setCallStarted] = useState(false);
+  const [hintsEnabled, setHintsEnabled] = useState(false);
+  const callActiveRef = useRef(false);
+  const busyRef = useRef(false);
+  const versionRef = useRef(0);
+  const requestRef = useRef<{ text: string; key: string } | null>(null);
   const {
     speak,
     silence,
@@ -75,30 +80,39 @@ export default function SimulationPage() {
     error: voiceError,
     usingElevenLabs,
     voiceChecked,
+    voiceReady,
   } = useProspectVoice(
     sim?.scenario?.prospect_name ?? "",
     sim?.voice_persona ?? "default",
     sim?.difficulty ?? 2,
+    id,
   );
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const turnAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    endedRef.current = false;
+    return () => { endedRef.current = true; callActiveRef.current = false; turnAbortRef.current?.abort(); };
+  }, []);
 
   const turnMutation = useMutation({
-    mutationFn: (text: string) =>
-      apiPost<TurnResponse>(`/simulations/${id}/turns`, { text, at: seconds }),
-    onSuccess: (res, text) => {
+    mutationFn: (text: string) => {
+      const ctrl = new AbortController(); turnAbortRef.current = ctrl;
+      return apiPost<TurnResponse>(`/simulations/${id}/turns`, { text, at: seconds, idempotency_key: requestRef.current?.key, expected_version: versionRef.current }, { signal: ctrl.signal });
+    },
+    onSuccess: (res) => {
+      busyRef.current = false;
       if (endedRef.current) return; // late reply after End Simulation — discard entirely
       setPendingRep(null);
       setTurnError(null);
       setFailedLine(null);
-      setTyped("");
-      setTurns((prev) => [
-        ...prev,
-        { speaker: "rep", text, at: seconds },
-        { speaker: "prospect", text: res.reply, at: seconds },
-      ]);
+      setTurns(res.transcript);
+      versionRef.current = res.version;
+      requestRef.current = null;
       setPendingSpeak(res.reply);
     },
     onError: (err, text) => {
+      busyRef.current = false;
+      void qc.invalidateQueries({ queryKey: ['simulation', id] });
       setPendingRep(null);
       if (endedRef.current) return;
       setFailedLine(text);
@@ -118,7 +132,14 @@ export default function SimulationPage() {
   turnRef.current = turnMutation;
   const send = useCallback((text: string) => {
     const clean = text.trim();
-    if (!clean || turnRef.current.isPending || endedRef.current) return;
+    if (!clean || endedRef.current || !callActiveRef.current) return;
+    if (busyRef.current) {
+      setTyped(prev => `${prev} ${clean}`.trim());
+      return;
+    }
+    busyRef.current = true;
+    if (requestRef.current?.text !== clean) requestRef.current = { text: clean, key: crypto.randomUUID() };
+    setTyped('');
     setPendingRep(clean);
     setTurnError(null);
     turnRef.current.mutate(clean);
@@ -134,6 +155,13 @@ export default function SimulationPage() {
     supported: micSupported,
   } = useMic(send);
 
+  const activate = useMutation({
+    mutationFn: () => apiPost<Simulation>(`/simulations/${id}/activate`),
+    onSuccess: data => { qc.setQueryData(['simulation', id], data); setCallStarted(true); callActiveRef.current = true; },
+    onError: () => toast.error('Could not start this call. Retry or return to History.'),
+  });
+  const abandon = useMutation({ mutationFn: () => apiPost<Simulation>(`/simulations/${id}/abandon`), onSuccess: () => navigate('/history') });
+
   // Speak the prospect's reply, pausing the microphone so it doesn't hear itself.
   useEffect(() => {
     if (!pendingSpeak) return;
@@ -146,11 +174,11 @@ export default function SimulationPage() {
     });
   }, [pendingSpeak, muted, speak, startMic, stopMic]);
 
-  const coachingOn = Boolean(sim && sim.difficulty <= 2);
+  const coachingOn = Boolean(sim && sim.difficulty <= 2 && hintsEnabled);
   const { data: hint, isFetching: hintLoading } = useQuery({
     queryKey: ["hint", id, turns.length],
     queryFn: () => apiGet<Hint>(`/simulations/${id}/hint`),
-    enabled: coachingOn && turns.length > 0 && !turnMutation.isPending && !ended,
+    enabled: coachingOn && callStarted && turns.length > 0 && !turnMutation.isPending && !ended,
     retry: false,
     staleTime: Infinity,
   });
@@ -170,6 +198,11 @@ export default function SimulationPage() {
       navigate(`/scorecard/${id}`);
     },
     onError: (err) => {
+      if (err instanceof ApiError && err.status === 422) {
+        endedRef.current = false; callActiveRef.current = true; setEnded(false);
+        toast.error('No speech had been accepted yet. Wait for your reply to save, then end the call.');
+        return;
+      }
       // Grading failed — keep the call frozen but show a retry instead of a
       // spinner that never resolves.
       const detail =
@@ -186,16 +219,31 @@ export default function SimulationPage() {
     if (sim && !hydrated) {
       setTurns(sim.transcript);
       setHydrated(true);
+      versionRef.current = sim.version ?? 0;
+      if (sim.status === 'active') { setCallStarted(true); callActiveRef.current = true; }
+      if (['grading', 'grading_failed', 'ending', 'analyzing'].includes(sim.status)) {
+        endedRef.current = true; setEnded(true); setCallStarted(true);
+        setGradeError(sim.grading_error || 'The call is frozen. Retry grading to recover your report.');
+      }
+      if (sim.status === 'abandoned') navigate('/history', { replace: true });
       if (sim.status === "completed") navigate(`/scorecard/${sim.id}`, { replace: true });
     }
   }, [sim, hydrated, navigate]);
 
+  useEffect(() => {
+    if (sim && turnError) { setTurns(sim.transcript); versionRef.current = sim.version ?? 0; }
+  }, [sim, turnError]);
+
   // call timer
   useEffect(() => {
-    if (!sim || sim.status === "completed" || !callStarted) return;
-    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    if (!sim || !callStarted) return;
+    if (ended || sim.ended_at) { if (sim.ended_at) setSeconds(sim.duration_seconds); return; }
+    const started = Date.parse(sim.call_started_at ?? sim.started_at);
+    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [sim, callStarted]);
+  }, [sim, callStarted, ended]);
 
   // speak the prospect's opening line once
   useEffect(() => {
@@ -211,6 +259,7 @@ export default function SimulationPage() {
   }, [turns, pendingRep]);
 
   const toggleMic = () => {
+    if (!callStarted || sim?.status !== 'active' || endedRef.current || complete.isPending || busyRef.current) return;
     if (micListening) {
       micWanted.current = false;
       stopMic();
@@ -225,7 +274,7 @@ export default function SimulationPage() {
   toggleMicRef.current = toggleMic;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Space" && e.target === document.body) {
+      if (e.code === "Space" && !e.repeat && e.target === document.body) {
         e.preventDefault();
         toggleMicRef.current();
       }
@@ -253,10 +302,10 @@ export default function SimulationPage() {
   }
 
   const scenario = sim?.scenario;
-  const thinking = turnMutation.isPending || voicePhase === "loading";
+    const thinking = turnMutation.isPending || voicePhase === "loading";
   // Only an in-flight turn blocks sending. Voice loading must never disable the
   // reply controls — the rep would silently lose the line they just typed.
-  const sending = turnMutation.isPending;
+  const sending = turnMutation.isPending || ended || !callStarted;
 
   const phase = thinking
     ? {
@@ -298,6 +347,7 @@ export default function SimulationPage() {
           <span className="text-[13px] text-slate-400" data-testid="simulation-exercise">
             {sim?.exercise_name} · Level {sim?.difficulty} {sim?.difficulty_name}
           </span>
+          {sim?.is_demo ? <span className='text-xs text-sky-300' data-testid='simulation-demo-label'>Demo scenario · fictional buyer</span> : null}
           {sim ? (
             <span
               className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300"
@@ -324,7 +374,7 @@ export default function SimulationPage() {
               : voiceError
                 ? "Voice failed"
                 : usingElevenLabs
-                  ? `ElevenLabs voice · ${sim?.scenario?.prospect_name?.split(" ")[0] ?? "prospect"}`
+                  ? `ElevenLabs · ${voiceReady ? 'audio played successfully' : 'voice configured, playback not confirmed'}`
                   : "Voice unavailable"}
           </span>
           <span
@@ -343,12 +393,23 @@ export default function SimulationPage() {
             Preparing your prospect…
           </div>
         </div>
-      ) : !callStarted ? (
+      ) : !callStarted ? (<>
+        <section className='mx-auto mt-6 w-full max-w-[620px] px-5' data-testid='pre-call-brief'>
+          <h2 className='font-heading text-lg font-bold' data-testid='brief-heading'>{sim.is_demo ? 'Your 2-minute demo brief' : 'Your call brief'}</h2>
+          <p className='mt-2 text-sm text-slate-300' data-testid='brief-product'><strong>You sell:</strong> {scenario.product_sheet?.one_liner || scenario.product}</p>
+          <p className='mt-2 text-sm text-slate-300' data-testid='brief-buyer'><strong>Buyer:</strong> {scenario.prospect_name}, {scenario.prospect_role} · {scenario.company}</p>
+          <p className='mt-2 text-sm text-slate-300' data-testid='brief-objective'><strong>Objective:</strong> {scenario.objective}</p>
+          {sim.is_demo ? <p className='mt-2 text-xs text-slate-400' data-testid='demo-timing-note'>Aim for two minutes, then end the call for coaching. This is a target, not a time limit.</p> : null}
+          <Button variant='ghost' className='mt-3 text-slate-300' data-testid='setup-abandon' onClick={() => abandon.mutate()} disabled={abandon.isPending}>Leave this preparation</Button>
+        </section>
         <MicCheck
+          simulationId={id}
           prospectName={scenario.prospect_name}
           difficulty={sim.difficulty}
-          onStart={() => setCallStarted(true)}
+          busy={activate.isPending}
+          onStart={(typedMode) => { if (typedMode) setMuted(true); activate.mutate(); }}
         />
+        </>
       ) : (
         <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col px-5 py-6 sm:px-8">
           {sim.mode === "moment" ? (
@@ -397,6 +458,9 @@ export default function SimulationPage() {
               </span>
             </div>
           </section>
+
+          <details className='mt-4 rounded-lg border border-slate-800 p-3 text-sm' data-testid='call-tip-sheet'><summary className='cursor-pointer text-slate-300' data-testid='call-tip-sheet-toggle'>Product facts & call brief</summary><p className='mt-3' data-testid='call-tip-product'>{scenario.product_sheet?.one_liner || scenario.product}</p><p className='mt-2' data-testid='call-tip-pricing'>{scenario.product_sheet?.pricing}</p><p className='mt-2' data-testid='call-tip-known'>{scenario.known}</p><ul className='mt-2 list-disc pl-5'>{scenario.product_sheet?.limitations.map((l, i) => <li data-testid={`call-tip-limit-${i}`} key={l}>{l}</li>)}</ul></details>
+          {sim.difficulty <= 2 ? <Button variant='ghost' className='mt-2 self-start text-sky-300' data-testid='enable-live-hints' onClick={() => setHintsEnabled(v => !v)} disabled={ended}>{hintsEnabled ? 'Hide live coaching' : 'Use optional live coaching (assisted practice)'}</Button> : null}
 
           <div className={cn("mt-6 grid flex-1 gap-4", coachingOn && "lg:grid-cols-[1fr_320px]")}>
           <section className="flex flex-1 flex-col rounded-xl border border-[#1E293B] bg-[#0B1220]">
@@ -452,6 +516,7 @@ export default function SimulationPage() {
                 <Button
                   size="lg"
                   onClick={toggleMic}
+                  disabled={!callStarted || ended || sim.status !== 'active' || complete.isPending || sending || !micSupported}
                   data-testid="mic-toggle-button"
                   className={cn(
                     "font-semibold",
@@ -485,6 +550,7 @@ export default function SimulationPage() {
                   onClick={() => {
                     // Terminate the live session first, then analyse the frozen transcript.
                     endedRef.current = true;
+                    callActiveRef.current = false;
                     setEnded(true);
                     micWanted.current = false;
                     abortMic();
@@ -495,7 +561,7 @@ export default function SimulationPage() {
                     setTurnError(null);
                     complete.mutate();
                   }}
-                  disabled={complete.isPending || ended}
+                  disabled={complete.isPending || ended || !turns.some(t => t.speaker === 'rep') && !pendingRep}
                   data-testid="end-simulation-button"
                 >
                   {ended || complete.isPending ? (
@@ -515,7 +581,7 @@ export default function SimulationPage() {
               <ReplyComposer
                 typed={typed}
                 onTyped={setTyped}
-                onSend={send}
+                onSend={(text) => { silence(); stopMic(); send(text); }}
                 sending={sending}
                 micSupported={micSupported}
                 turnError={turnError}
@@ -527,8 +593,7 @@ export default function SimulationPage() {
                 </p>
               ) : (
                 <p className="mt-2 text-[12px] text-slate-500">
-                  Press the space bar to toggle your microphone. No coaching appears until the call
-                  ends.
+                  Press Space outside controls to toggle the microphone. Final speech received while a reply is pending is preserved in your draft.
                 </p>
               )}
             </div>

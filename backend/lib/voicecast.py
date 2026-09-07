@@ -93,7 +93,15 @@ def resolve(character: str = "", persona: str = "default") -> dict:
     if entry:
         return {"character": character.strip(), **entry}
     key = PERSONA_VOICES.get(persona, DEFAULT_KEY)
-    return {"character": key, **CAST[key]}
+    return {"character": character.strip() or key, **CAST[key]}
+
+
+def snapshot(scenario: dict, persona: str = 'default') -> dict:
+    import uuid
+    identity = scenario.get('journey_id') or scenario.get('id') or scenario['prospect_name']
+    return {**resolve(scenario.get('prospect_name', ''), persona),
+            'character_id': str(uuid.uuid5(uuid.NAMESPACE_URL, f'repforge:buyer:{identity}')),
+            'version': 'cast-v1', 'model_id': 'eleven_multilingual_v2'}
 
 
 def cast_entries() -> list[dict]:

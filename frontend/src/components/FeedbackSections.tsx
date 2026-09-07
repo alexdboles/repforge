@@ -78,7 +78,7 @@ export function MissesSection({
           ) : null}
           {s.better_approach ? (
             <div className="mt-2.5 rounded-md bg-white p-2.5 text-[13px]">
-              <span className="font-semibold text-slate-900">Better approach: </span>
+              <span className="font-semibold text-slate-900">Suggested replacement (not a quotation): </span>
               <span className="text-slate-700">{s.better_approach}</span>
             </div>
           ) : null}

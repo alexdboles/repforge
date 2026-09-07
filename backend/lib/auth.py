@@ -5,7 +5,7 @@ sent from the browser. Every user-owned route derives the caller from the cookie
 and verifies ownership server-side.
 """
 import os
-import time
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -13,6 +13,7 @@ import jwt
 from fastapi import Cookie, Header, HTTPException, Response
 
 from lib.db import db
+from lib.security import rate_limit
 
 COOKIE_NAME = "repforge_session"
 ALGORITHM = "HS256"
@@ -32,6 +33,8 @@ def _secret() -> str:
 
 
 def hash_password(password: str) -> str:
+    if len(password.encode('utf-8')) > 72:
+        raise HTTPException(422, 'Password must be at most 72 UTF-8 bytes; accented characters may use more than one byte.')
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
@@ -42,7 +45,7 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def issue_session(response: Response, user_id: str) -> str:
+async def issue_session(response: Response, user_id: str) -> str:
     """Set the session cookie and also hand the token back to the caller.
 
     The cookie is the primary mechanism (httpOnly, Secure, SameSite=None so it
@@ -52,13 +55,16 @@ def issue_session(response: Response, user_id: str) -> str:
     back to the login screen inside an iframe.
     """
     now = datetime.now(timezone.utc)
+    user = await db.users.find_one({'id': user_id})
+    epoch = (user or {}).get('auth_epoch', 0)
+    sid = str(uuid.uuid4())
     cookie_token = jwt.encode(
-        {"sub": user_id, "exp": now + timedelta(days=SESSION_DAYS)},
+        {"sub": user_id, "epoch": epoch, "sid": sid, "exp": now + timedelta(days=SESSION_DAYS)},
         _secret(),
         algorithm=ALGORITHM,
     )
     bearer_token = jwt.encode(
-        {"sub": user_id, "exp": now + timedelta(hours=BEARER_HOURS)},
+        {"sub": user_id, "epoch": epoch, "sid": sid, "exp": now + timedelta(hours=BEARER_HOURS)},
         _secret(),
         algorithm=ALGORITHM,
     )
@@ -90,17 +96,22 @@ async def current_user(
     bearer = ""
     if authorization and authorization.lower().startswith("bearer "):
         bearer = authorization.split(" ", 1)[1].strip()
-    token = bearer or repforge_session
-    if not token:
-        raise HTTPException(status_code=401, detail="Sign in to continue")
-    try:
-        claims = jwt.decode(token, _secret(), algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Your session has expired") from None
-    user = await db.users.find_one({"id": claims.get("sub")}, {"_id": 0, "password": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="Your session has expired")
-    return user
+    for token in (repforge_session, bearer):
+        if not isinstance(token, str) or not token:
+            continue
+        try:
+            claims = jwt.decode(token, _secret(), algorithms=[ALGORITHM])
+        except jwt.PyJWTError:
+            continue
+        user = await db.users.find_one({'id': claims.get('sub')}, {'_id': 0, 'password': 0})
+        if user and claims.get('epoch', 0) == user.get('auth_epoch', 0):
+            user = await personal_workspace(user)
+            membership = await db.memberships.find_one({'workspace_id': user['workspace_id'], 'user_id': user['id'], 'verified': True})
+            if not membership:
+                raise HTTPException(403, 'Workspace membership needs verification')
+            user['workspace_role'] = membership['role']
+            return user
+    raise HTTPException(401, 'Sign in to continue')
 
 
 def require_self(user_id: str, user: dict) -> None:
@@ -115,24 +126,31 @@ def require_owned(doc: dict, user: dict, label: str = "Resource") -> None:
         raise HTTPException(status_code=404, detail=f"{label} not found")
 
 
-# ---------- abuse control ----------
-# In-process fixed-window counters. Enough to stop one client burning paid
-# ElevenLabs/LLM calls; a multi-worker deployment would move this to Mongo/Redis.
-_BUCKETS: dict[str, list[float]] = {}
-
-
-def rate_limit(key: str, limit: int, window_seconds: int, message: str) -> None:
-    now = time.time()
-    hits = [t for t in _BUCKETS.get(key, []) if now - t < window_seconds]
-    if len(hits) >= limit:
-        _BUCKETS[key] = hits
-        raise HTTPException(status_code=429, detail=message)
-    hits.append(now)
-    _BUCKETS[key] = hits
+async def personal_workspace(user: dict) -> dict:
+    wid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repforge:personal:{user['id']}"))
+    await db.workspaces.update_one({'id': wid}, {'$setOnInsert': {
+        'id': wid, 'name': user.get('org') or 'Personal', 'kind': 'personal', 'owner_id': user['id']}}, upsert=True)
+    await db.memberships.update_one({'workspace_id': wid, 'user_id': user['id']}, {'$setOnInsert': {
+        'workspace_id': wid, 'user_id': user['id'], 'role': 'owner', 'verified': True}}, upsert=True)
+    if not user.get('workspace_id'):
+        user['workspace_id'] = wid
+        await db.users.update_one({'id': user['id']}, {'$set': {'workspace_id': wid, 'personal_workspace_id': wid}})
+    membership = await db.memberships.find_one({'workspace_id': user['workspace_id'], 'user_id': user['id'], 'verified': True})
+    user['workspace_role'] = membership['role'] if membership else 'member'
+    return user
 
 
 def require_org(org: str, user: dict) -> None:
     """Tenant boundary: team data is visible only inside the caller's own org."""
-    caller_org = (user.get("org") or "").strip()
-    if not org or not caller_org or org.strip().lower() != caller_org.lower():
-        raise HTTPException(status_code=403, detail="Not your organisation")
+    if not org or org != user.get('workspace_id'):
+        raise HTTPException(403, 'Not your workspace')
+
+
+def require_manager(user: dict):
+    if user.get('workspace_role') not in ('owner', 'admin', 'manager') or user.get('is_guest'):
+        raise HTTPException(403, 'Manager permission required')
+
+
+def require_admin(user: dict):
+    if not user.get('is_admin'):
+        raise HTTPException(403, 'Administrator permission required')

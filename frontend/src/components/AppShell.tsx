@@ -21,7 +21,7 @@ export function useCurrentUser() {
   const id = getUserId();
   return useQuery({
     queryKey: ["user", id],
-    queryFn: () => apiGet<UserProfile>(`/users/${id}`),
+    queryFn: () => apiGet<UserProfile>('/auth/me'),
     enabled: Boolean(id),
     retry: false,
   });
@@ -66,6 +66,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
+            {user?.is_admin ? <Link to='/owner/evidence' data-testid='owner-evidence-link' className='text-xs font-semibold text-primary'>Owner evidence</Link> : null}
             {user ? (
               <div className="hidden items-center gap-3 sm:flex" data-testid="shell-stats">
                 <span className="flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[12px] font-semibold text-slate-700">

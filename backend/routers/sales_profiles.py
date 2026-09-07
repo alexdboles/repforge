@@ -152,8 +152,8 @@ async def delete_profile(profile_id: str, me: dict = Depends(current_user)):
 async def create_custom_scenario(
     payload: CustomScenarioRequest, me: dict = Depends(current_user)
 ):
-    rate_limit(
-        f"scenario:{me['id']}", 30, 3600, "Too many scenario builds. Please try again later."
+    await rate_limit(
+        f"scenario:{me['id']}", 3 if me.get('is_guest') else 30, 3600, "Too many scenario builds. Please try again later."
     )
     profile = await db.sales_profiles.find_one({"id": payload.profile_id}, {"_id": 0})
     if not profile:
@@ -174,7 +174,7 @@ async def create_custom_scenario(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
-            status_code=502, detail=f"Scenario generation failed: {exc}"
+            status_code=502, detail="Scenario generation failed. Please try again."
         ) from exc
 
     doc = {
