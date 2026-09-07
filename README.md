@@ -1,5 +1,7 @@
 # RepForge — AI Sales Practice & Coaching
 
+[Project case study](docs/CASE_STUDY.md) — problem, decisions, verification, and limitations.
+
 ## Practice the conversation before it counts.
 
 RepForge is an AI sales flight simulator for new and developing sales professionals.
